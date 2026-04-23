@@ -11,6 +11,9 @@ dist/
 # Vite
 .vite/
 
+# Git worktrees
+.worktrees/
+
 # Editor directories and files
 .DS_Store
 *.local
