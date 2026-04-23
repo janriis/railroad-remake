@@ -1,0 +1,177 @@
+@import url('https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=IM+Fell+English:ital@0;1&display=swap');
+
+/* Reset & base */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  background: #0a0604;
+  overflow: hidden;
+}
+
+select,
+input,
+button {
+  font: inherit;
+}
+
+/* Wooden surfaces */
+.wood-grain {
+  background: linear-gradient(
+    160deg,
+    #2a1a0e 0%,
+    #3b220f 20%,
+    #2e1a0c 40%,
+    #3a200e 60%,
+    #2a1a0e 80%,
+    #331d0d 100%
+  );
+}
+
+.wood-dark {
+  background: linear-gradient(
+    160deg,
+    #180e06 0%,
+    #231408 30%,
+    #1c1005 60%,
+    #231508 100%
+  );
+}
+
+/* Parchment / aged map */
+.map-paper {
+  background-color: #d4b896;
+  background-image:
+    radial-gradient(ellipse at 20% 20%, #c9a87a 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, #c2a070 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, #ddc09e 0%, transparent 70%);
+}
+
+/* Panel header */
+.panel-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 8px 14px;
+  border-bottom: 1px solid #1a0c06;
+  background: linear-gradient(180deg, #3d2410 0%, #2a1a0e 100%);
+}
+
+/* Typography */
+.display {
+  font-family: 'IM Fell English SC', 'Palatino Linotype', Palatino, serif;
+}
+
+.uppercase {
+  text-transform: uppercase;
+}
+
+.gold {
+  color: #f0d896;
+}
+
+.gold-dim {
+  color: #c49a44;
+}
+
+.numeric {
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.body-serif {
+  font-family: 'IM Fell English', 'Palatino Linotype', Palatino, Georgia, serif;
+}
+
+/* Brass button */
+.btn-brass {
+  background: linear-gradient(180deg, #d4aa50 0%, #b8882c 50%, #c49a44 100%);
+  border: 1px solid #8b6a30;
+  color: #1a0c08;
+  padding: 8px 18px;
+  cursor: pointer;
+  font-family: 'IM Fell English SC', 'Palatino Linotype', Palatino, serif;
+  font-size: 0.95rem;
+  letter-spacing: 0.03em;
+  border-radius: 2px;
+  transition: filter 0.15s ease;
+}
+
+.btn-brass:hover {
+  filter: brightness(1.1);
+}
+
+.btn-brass:active {
+  filter: brightness(0.9);
+}
+
+/* Navigation tab */
+.tab-plate {
+  padding: 8px 16px;
+  color: #a88238;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  font-family: 'IM Fell English SC', 'Palatino Linotype', Palatino, serif;
+  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+  transition: color 0.15s ease, border-bottom-color 0.15s ease;
+  user-select: none;
+}
+
+.tab-plate[data-active='true'] {
+  color: #f0d896;
+  border-bottom-color: #c49a44;
+  background: linear-gradient(180deg, transparent 0%, rgba(196, 154, 68, 0.08) 100%);
+}
+
+/* Parchment form input */
+.field-parchment {
+  background: #d4b896;
+  border: 1px solid #8b6a30;
+  color: #2a1a0e;
+  padding: 5px 10px;
+  font-family: 'IM Fell English', 'Palatino Linotype', Palatino, Georgia, serif;
+  border-radius: 2px;
+  outline: none;
+}
+
+.field-parchment:focus {
+  border-color: #c49a44;
+  box-shadow: 0 0 0 2px rgba(196, 154, 68, 0.25);
+}
+
+/* Ticker tape */
+.ticker-track {
+  display: flex;
+  white-space: nowrap;
+  animation: tickerScroll 30s linear infinite;
+}
+
+@keyframes tickerScroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* Decorative divider */
+.divider-dots {
+  text-align: center;
+  color: #c49a44;
+}
+
+.divider-dots::before {
+  content: '· · · · ·';
+}
