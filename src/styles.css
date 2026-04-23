@@ -1,5 +1,48 @@
 @import url('https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=IM+Fell+English:ital@0;1&display=swap');
 
+/* ─── Theme tokens ─────────────────────────────────────── */
+:root {
+  --bg-base:          #0a0604;
+  --bg-surface:       linear-gradient(160deg,#180e06 0%,#231408 30%,#1c1005 60%,#231508 100%);
+  --bg-wood-grain:    linear-gradient(160deg,#2a1a0e 0%,#3b220f 20%,#2e1a0c 40%,#3a200e 60%,#2a1a0e 80%,#331d0d 100%);
+  --bg-elevated:      linear-gradient(180deg,#6a4a28,#3a1f18);
+  --bg-panel-header:  linear-gradient(180deg,#3d2410 0%,#2a1a0e 100%);
+  --bg-dock:          linear-gradient(180deg,#3a1f18,#1a0c08);
+  --text-primary:     #f0d896;
+  --text-secondary:   #a88238;
+  --text-dim:         #8b6a30;
+  --text-muted:       #8b8070;
+  --accent:           #c49a44;
+  --border:           rgba(196,154,68,0.3);
+  --border-strong:    #1a0c08;
+  --green:            #6bbf5a;
+  --red:              #c85040;
+  --font-size-base:   11px;
+  --font-size-sm:     10px;
+  --font-size-label:  9px;
+}
+
+[data-theme="modern"] {
+  --bg-base:          #171310;
+  --bg-surface:       #1c1714;
+  --bg-wood-grain:    #1c1714;
+  --bg-elevated:      #2e2318;
+  --bg-panel-header:  #211c18;
+  --bg-dock:          #211c18;
+  --text-primary:     #f5f0e8;
+  --text-secondary:   #9d9080;
+  --text-dim:         #6b6358;
+  --text-muted:       #7a7268;
+  --accent:           #c49a44;
+  --border:           rgba(196,154,68,0.2);
+  --border-strong:    rgba(255,255,255,0.08);
+  --green:            #6dcc58;
+  --red:              #e06060;
+  --font-size-base:   13px;
+  --font-size-sm:     12px;
+  --font-size-label:  11px;
+}
+
 /* Reset & base */
 * {
   box-sizing: border-box;
@@ -16,7 +59,7 @@ body,
 }
 
 body {
-  background: #0a0604;
+  background: var(--bg-base);
   overflow: hidden;
 }
 
@@ -28,25 +71,11 @@ button {
 
 /* Wooden surfaces */
 .wood-grain {
-  background: linear-gradient(
-    160deg,
-    #2a1a0e 0%,
-    #3b220f 20%,
-    #2e1a0c 40%,
-    #3a200e 60%,
-    #2a1a0e 80%,
-    #331d0d 100%
-  );
+  background: var(--bg-wood-grain);
 }
 
 .wood-dark {
-  background: linear-gradient(
-    160deg,
-    #180e06 0%,
-    #231408 30%,
-    #1c1005 60%,
-    #231508 100%
-  );
+  background: var(--bg-surface);
 }
 
 /* Parchment / aged map */
@@ -64,8 +93,8 @@ button {
   flex-direction: row;
   align-items: center;
   padding: 8px 14px;
-  border-bottom: 1px solid #1a0c06;
-  background: linear-gradient(180deg, #3d2410 0%, #2a1a0e 100%);
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--bg-panel-header);
 }
 
 /* Typography */
@@ -78,11 +107,11 @@ button {
 }
 
 .gold {
-  color: #f0d896;
+  color: var(--text-primary);
 }
 
 .gold-dim {
-  color: #c49a44;
+  color: var(--accent);
 }
 
 .numeric {
@@ -118,20 +147,20 @@ button {
 /* Navigation tab */
 .tab-plate {
   padding: 8px 16px;
-  color: #a88238;
+  color: var(--text-secondary);
   border-bottom: 3px solid transparent;
   cursor: pointer;
   font-family: 'IM Fell English SC', 'Palatino Linotype', Palatino, serif;
-  font-size: 0.9rem;
+  font-size: var(--font-size-base);
   letter-spacing: 0.04em;
   transition: color 0.15s ease, border-bottom-color 0.15s ease;
   user-select: none;
 }
 
 .tab-plate[data-active='true'] {
-  color: #f0d896;
-  border-bottom-color: #c49a44;
-  background: linear-gradient(180deg, transparent 0%, rgba(196, 154, 68, 0.08) 100%);
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+  background: linear-gradient(180deg, transparent 0%, rgba(196,154,68,0.08) 100%);
 }
 
 /* Parchment form input */
@@ -169,7 +198,7 @@ button {
 /* Decorative divider */
 .divider-dots {
   text-align: center;
-  color: #c49a44;
+  color: var(--accent);
 }
 
 .divider-dots::before {
