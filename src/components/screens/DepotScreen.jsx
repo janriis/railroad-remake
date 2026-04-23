@@ -9,7 +9,7 @@ function Spec({ label, value }) {
   return (
     <div style={{ textAlign: 'center' }}>
       <Label>{label}</Label>
-      <div className="numeric" style={{ fontSize: 14, color: '#f0d896', marginTop: 2 }}>{value}</div>
+      <div className="numeric" style={{ fontSize: 14, color: 'var(--accent)', marginTop: 2 }}>{value}</div>
     </div>
   );
 }
@@ -34,10 +34,10 @@ export function DepotScreen({ onBack }) {
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', minHeight: 0, background: '#0a0604' }}>
+    <div style={{ flex: 1, display: 'flex', minHeight: 0, background: 'var(--bg-base)' }}>
       {/* Left: locomotive list */}
-      <div className="wood-dark" style={{ width: 300, borderRight: '1px solid #1a0c08', padding: 14, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'auto' }}>
-        <div className="display uppercase gold" style={{ fontSize: 13, letterSpacing: '0.2em', textAlign: 'center', padding: '8px 0', borderBottom: '1px solid rgba(196,154,68,0.3)' }}>
+      <div className="wood-dark" style={{ width: 300, borderRight: '1px solid var(--border-strong)', padding: 14, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'auto' }}>
+        <div className="display uppercase gold" style={{ fontSize: 13, letterSpacing: '0.2em', textAlign: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
           ⚙ Locomotive Catalogue ⚙
         </div>
 
@@ -49,24 +49,24 @@ export function DepotScreen({ onBack }) {
                  onClick={() => { setSelectedId(l.id); setQty(1); setOrdered(false); }}
                  style={{
                    padding: 10, cursor: 'pointer',
-                   background: isSelected ? 'linear-gradient(180deg,#6a4a28,#3a1f18)' : 'linear-gradient(180deg,#3a1f18,#2a1510)',
-                   border: isSelected ? '1px solid #c49a44' : '1px solid #1a0c08',
+                   background: isSelected ? 'var(--bg-elevated)' : 'var(--bg-surface)',
+                   border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border-strong)',
                    opacity: isAvailable ? 1 : 0.6,
                  }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <LocomotiveIcon color={isAvailable ? '#c49a44' : '#6a6a5a'} size={32} catalogId={l.id} />
+                <LocomotiveIcon color={isAvailable ? 'var(--accent)' : 'var(--text-muted)'} size={32} catalogId={l.id} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="display uppercase" style={{ fontSize: 11, color: isAvailable ? '#f0d896' : '#8b8070', letterSpacing: '0.12em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div className="display uppercase" style={{ fontSize: 'var(--font-size-label)', color: isAvailable ? 'var(--text-primary)' : 'var(--text-muted)', letterSpacing: '0.12em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {l.name}
                   </div>
-                  <div className="body-serif" style={{ fontSize: 10, color: '#a88238', fontStyle: 'italic' }}>{l.years}</div>
+                  <div className="body-serif" style={{ fontSize: 'var(--font-size-label)', color: 'var(--text-secondary)', fontStyle: 'italic' }}>{l.years}</div>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div className="numeric" style={{ fontSize: 12, color: isAvailable ? '#6bbf5a' : '#c85040' }}>
+                  <div className="numeric" style={{ fontSize: 'var(--font-size-sm)', color: isAvailable ? 'var(--green)' : 'var(--red)' }}>
                     ${l.price.toLocaleString()}
                   </div>
                   {!isAvailable && (
-                    <div style={{ fontSize: 9, color: '#c85040', fontFamily: 'IM Fell English SC, serif' }}>
+                    <div style={{ fontSize: 9, color: 'var(--red)', fontFamily: 'IM Fell English SC, serif' }}>
                       {l.availability}
                     </div>
                   )}
@@ -84,26 +84,23 @@ export function DepotScreen({ onBack }) {
       {/* Right: detail */}
       <div style={{ flex: 1, padding: 24, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
         <Panel title={loco.name}>
-          {/* Hero engraving */}
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16, padding: 12, background: 'rgba(0,0,0,0.3)', borderRadius: 2 }}>
             <BigLocomotiveEngraving color={available ? '#c49a44' : '#6a6a5a'} catalogId={loco.id} />
           </div>
 
-          {/* Era badge + years */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-            <span style={{ padding: '3px 12px', background: available ? '#3d5c2a' : '#6a4a28', color: '#f0d896', fontFamily: 'IM Fell English SC, serif', fontSize: 11, letterSpacing: '0.14em' }}>
+            <span style={{ padding: '3px 12px', background: available ? '#3d5c2a' : '#6a4a28', color: 'var(--text-primary)', fontFamily: 'IM Fell English SC, serif', fontSize: 11, letterSpacing: '0.14em' }}>
               {loco.era}
             </span>
-            <span className="body-serif" style={{ fontSize: 13, color: '#a88238', fontStyle: 'italic' }}>{loco.years}</span>
+            <span className="body-serif" style={{ fontSize: 13, color: 'var(--text-secondary)', fontStyle: 'italic' }}>{loco.years}</span>
             {!available && (
-              <span style={{ padding: '2px 8px', background: '#4a1a1a', color: '#c85040', fontFamily: 'IM Fell English SC, serif', fontSize: 10 }}>
+              <span style={{ padding: '2px 8px', background: '#4a1a1a', color: 'var(--red)', fontFamily: 'IM Fell English SC, serif', fontSize: 10 }}>
                 {loco.availability}
               </span>
             )}
           </div>
 
-          {/* Specs grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, padding: '12px 0', borderTop: '1px solid rgba(196,154,68,0.2)', borderBottom: '1px solid rgba(196,154,68,0.2)', marginBottom: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, padding: '12px 0', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
             <Spec label="Price" value={'$' + loco.price.toLocaleString()} />
             <Spec label="Max Speed" value={loco.maxSpeed + ' mph'} />
             <Spec label="Power" value={loco.power} />
@@ -111,14 +108,12 @@ export function DepotScreen({ onBack }) {
             <Spec label="Best For" value={loco.best} />
           </div>
 
-          {/* Description */}
-          <div className="body-serif" style={{ fontSize: 13, fontStyle: 'italic', color: '#d9c698', marginBottom: 16, lineHeight: 1.6 }}>
+          <div className="body-serif" style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>
             {loco.description}
           </div>
 
           <DividerDots />
 
-          {/* Purchase section */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             <div>
               <Label>Quantity</Label>
@@ -134,14 +129,14 @@ export function DepotScreen({ onBack }) {
 
             <div>
               <Label>Total Cost</Label>
-              <div className="numeric" style={{ fontSize: 18, color: canAfford && available ? '#f0d896' : '#c85040', marginTop: 4 }}>
+              <div className="numeric" style={{ fontSize: 18, color: canAfford && available ? 'var(--text-primary)' : 'var(--red)', marginTop: 4 }}>
                 ${(loco.price * qty).toLocaleString()}
               </div>
             </div>
 
             <div>
               <Label>Treasury</Label>
-              <div className="numeric" style={{ fontSize: 14, color: '#a88238', marginTop: 4 }}>
+              <div className="numeric" style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
                 ${cash.toLocaleString()}
               </div>
             </div>
