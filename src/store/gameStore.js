@@ -10,6 +10,20 @@ const TRAIN_COLORS = ['#c49a44', '#8b2818', '#3d5c2a', '#1e3a5c', '#6b4a88', '#2
 let _routeCounter = 1;
 let _locoCounter = 1;
 
+export function hydrateCounters(state) {
+  if (!state) return;
+  const maxRoute = (state.routes ?? []).reduce((max, r) => {
+    const n = parseInt(r.id.replace('R-', ''), 10);
+    return isNaN(n) ? max : Math.max(max, n);
+  }, 0);
+  const maxLoco = (state.ownedLocomotives ?? []).reduce((max, l) => {
+    const n = parseInt(l.uid.replace('L-', ''), 10);
+    return isNaN(n) ? max : Math.max(max, n);
+  }, 0);
+  _routeCounter = maxRoute + 1;
+  _locoCounter = maxLoco + 1;
+}
+
 export const INITIAL_STATE = {
   tracks: INITIAL_TRACKS.map(t => ({ ...t })),
   trains: INITIAL_TRAINS.map(t => ({ ...t })),
@@ -23,6 +37,7 @@ export const INITIAL_STATE = {
   selectedCityId: null,
   focusTrainId: null,
   trackLayingFrom: null,
+  version: 1,
 };
 
 export const useGameStore = create((set, get) => ({

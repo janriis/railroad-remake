@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useGameStore, INITIAL_STATE } from './gameStore';
+import { useGameStore, INITIAL_STATE, hydrateCounters } from './gameStore';
 import { INITIAL_TRACKS } from '../data/tracks';
 import { INITIAL_TRAINS } from '../data/trains';
 
@@ -127,5 +127,37 @@ describe('tickRevenue', () => {
     const before = useGameStore.getState().cash;
     useGameStore.getState().tickRevenue();
     expect(useGameStore.getState().cash).toBe(before);
+  });
+});
+
+describe('hydrateCounters', () => {
+  beforeEach(() => {
+    reset();
+    hydrateCounters({ routes: [], ownedLocomotives: [] });
+  });
+
+  it('sets _routeCounter above the max existing route ID', () => {
+    hydrateCounters({ routes: [{ id: 'R-3' }, { id: 'R-7' }], ownedLocomotives: [] });
+    useGameStore.getState().buyLocomotive('americ');
+    const uid = useGameStore.getState().ownedLocomotives[0].uid;
+    const routeId = useGameStore.getState().createRoute(['sf', 'sac'], uid);
+    expect(routeId).toBe('R-8');
+  });
+
+  it('sets _locoCounter above the max existing loco UID', () => {
+    hydrateCounters({ routes: [], ownedLocomotives: [{ uid: 'L-5' }, { uid: 'L-2' }] });
+    const uids = useGameStore.getState().buyLocomotive('americ');
+    expect(uids[0]).toBe('L-6');
+  });
+
+  it('defaults counters to 1 when state has no routes or locos', () => {
+    hydrateCounters({ routes: [], ownedLocomotives: [] });
+    const uids = useGameStore.getState().buyLocomotive('americ');
+    expect(uids[0]).toBe('L-1');
+  });
+
+  it('handles null/undefined state gracefully', () => {
+    expect(() => hydrateCounters(null)).not.toThrow();
+    expect(() => hydrateCounters(undefined)).not.toThrow();
   });
 });
