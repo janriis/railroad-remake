@@ -8,6 +8,9 @@ export function TrainDetailPanel({ trainId, onClose, onOpenRoute }) {
   const train = useGameStore(s => s.trains).find(t => t.id === trainId);
   const routes = useGameStore(s => s.routes);
   const route = routes.find(r => r.id === trainId);
+  const ownedLocomotives = useGameStore(s => s.ownedLocomotives);
+  const loco = route ? ownedLocomotives.find(l => l.uid === route.locomotiveUid) : null;
+  const catalogId = loco?.catalogId ?? 'americ';
 
   if (!train) return null;
 
@@ -21,7 +24,7 @@ export function TrainDetailPanel({ trainId, onClose, onOpenRoute }) {
     >
       {/* Locomotive icon + model */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-        <LocomotiveIcon color={train.color} size={48} />
+        <LocomotiveIcon color={train.color} size={48} catalogId={catalogId} />
         <div>
           <div className="display uppercase gold" style={{ fontSize: 12, letterSpacing: '0.14em' }}>{train.model}</div>
           <div className="body-serif" style={{ fontSize: 11, color: '#a88238', fontStyle: 'italic' }}>{train.id}</div>

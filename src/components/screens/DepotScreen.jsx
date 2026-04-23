@@ -54,7 +54,7 @@ export function DepotScreen({ onBack }) {
                    opacity: isAvailable ? 1 : 0.6,
                  }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <LocomotiveIcon color={isAvailable ? '#c49a44' : '#6a6a5a'} size={32} />
+                <LocomotiveIcon color={isAvailable ? '#c49a44' : '#6a6a5a'} size={32} catalogId={l.id} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="display uppercase" style={{ fontSize: 11, color: isAvailable ? '#f0d896' : '#8b8070', letterSpacing: '0.12em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {l.name}
@@ -86,7 +86,7 @@ export function DepotScreen({ onBack }) {
         <Panel title={loco.name}>
           {/* Hero engraving */}
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16, padding: 12, background: 'rgba(0,0,0,0.3)', borderRadius: 2 }}>
-            <BigLocomotiveEngraving color={available ? '#c49a44' : '#6a6a5a'} />
+            <BigLocomotiveEngraving color={available ? '#c49a44' : '#6a6a5a'} catalogId={loco.id} />
           </div>
 
           {/* Era badge + years */}
