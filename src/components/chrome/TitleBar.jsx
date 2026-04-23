@@ -1,4 +1,6 @@
+import { useState, useRef, useEffect } from 'react';
 import { StatDisplay } from './StatDisplay.jsx';
+import { useTheme } from '../../context/ThemeContext.jsx';
 
 function CompanyCrest() {
   return (
@@ -25,20 +27,41 @@ function CompanyCrest() {
   );
 }
 
+const THEMES = [
+  { id: 'modern',   label: '✦ Modern' },
+  { id: 'victorian', label: '⚙ Victorian' },
+];
+
 export function TitleBar({ company, onNav, screen, onToggleHUD, hudVisible }) {
+  const { theme, setTheme } = useTheme();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef(null);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    function onMouseDown(e) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) {
+        setPickerOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [pickerOpen]);
+
   const tabs = [
-    { id: 'map', label: 'Map Room' },
+    { id: 'map',   label: 'Map Room' },
     { id: 'track', label: 'Track Laying' },
     { id: 'depot', label: 'Locomotive Works' },
     { id: 'route', label: 'Dispatch Office' },
   ];
+
   return (
-    <div className="wood-dark" style={{ borderBottom: '1px solid #1a0c08', boxShadow: 'inset 0 -1px 0 rgba(255,200,140,0.1), 0 2px 4px rgba(0,0,0,0.6)', display: 'flex', alignItems: 'stretch', height: 72, position: 'relative' }}>
-      <div style={{ padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 14, borderRight: '1px solid #1a0c08' }}>
+    <div className="wood-dark" style={{ borderBottom: '1px solid var(--border-strong)', boxShadow: 'inset 0 -1px 0 rgba(255,200,140,0.1), 0 2px 4px rgba(0,0,0,0.6)', display: 'flex', alignItems: 'stretch', height: 72, position: 'relative' }}>
+      <div style={{ padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 14, borderRight: '1px solid var(--border-strong)' }}>
         <CompanyCrest />
         <div>
           <div className="display uppercase gold" style={{ fontSize: 15, letterSpacing: '0.18em', textShadow: '0 1px 0 rgba(0,0,0,0.8)' }}>{company.name}</div>
-          <div className="body-serif" style={{ fontSize: 11, color: '#a88238', fontStyle: 'italic' }}>Estab. {company.founded} · Yr. {company.year} · {company.month}</div>
+          <div className="body-serif" style={{ fontSize: 'var(--font-size-base)', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Estab. {company.founded} · Yr. {company.year} · {company.month}</div>
         </div>
       </div>
       <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', padding: '0 20px' }}>
@@ -49,9 +72,51 @@ export function TitleBar({ company, onNav, screen, onToggleHUD, hudVisible }) {
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '8px 24px', borderLeft: '1px solid #1a0c08' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '8px 24px', borderLeft: '1px solid var(--border-strong)' }}>
         <StatDisplay label="Treasury" value={'$' + company.cash.toLocaleString()} big />
         <StatDisplay label="Stock" value={'$68.25'} delta={1.75} />
+
+        {/* Theme picker */}
+        <div style={{ position: 'relative' }} ref={pickerRef}>
+          <button
+            className="btn-brass"
+            onClick={() => setPickerOpen(v => !v)}
+            style={{ fontSize: 11, padding: '6px 10px' }}
+            title="Switch theme"
+          >
+            🎨
+          </button>
+          {pickerOpen && (
+            <div style={{
+              position: 'absolute', right: 0, top: 'calc(100% + 4px)',
+              background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+              borderRadius: 3, padding: 6,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+              minWidth: 148, zIndex: 100,
+            }}>
+              <div style={{ color: 'var(--text-dim)', fontSize: 'var(--font-size-label)', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 6, fontFamily: 'IM Fell English SC, serif' }}>Theme</div>
+              {THEMES.map(t => (
+                <div
+                  key={t.id}
+                  onClick={() => { setTheme(t.id); setPickerOpen(false); }}
+                  style={{
+                    padding: '5px 8px', cursor: 'pointer', borderRadius: 2, marginBottom: 3,
+                    background: theme === t.id ? 'rgba(196,154,68,0.15)' : 'transparent',
+                    border: `1px solid ${theme === t.id ? 'var(--accent)' : 'transparent'}`,
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    color: theme === t.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontSize: 'var(--font-size-sm)',
+                    fontFamily: 'IM Fell English SC, serif',
+                  }}
+                >
+                  {t.label}
+                  {theme === t.id && <span style={{ color: 'var(--accent)', fontSize: 10 }}>✓</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <button className="btn-brass" onClick={onToggleHUD} style={{ fontSize: 11, padding: '6px 12px' }}>
           {hudVisible ? 'Hide HUD' : 'Show HUD'}
         </button>
