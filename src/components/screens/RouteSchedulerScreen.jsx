@@ -97,9 +97,10 @@ function RouteBuilder({ onDone, onCancel }) {
 }
 
 export function RouteSchedulerScreen({ onBack }) {
-  const routes          = useGameStore(s => s.routes);
-  const trains          = useGameStore(s => s.trains);
-  const suspendRoute    = useGameStore(s => s.suspendRoute);
+  const routes           = useGameStore(s => s.routes);
+  const trains           = useGameStore(s => s.trains);
+  const suspendRoute     = useGameStore(s => s.suspendRoute);
+  const ownedLocomotives = useGameStore(s => s.ownedLocomotives);
   const [building, setBuilding] = useState(false);
   const [selectedId, setSelectedId] = useState(routes[0]?.id ?? null);
 
@@ -144,9 +145,10 @@ export function RouteSchedulerScreen({ onBack }) {
             <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 12 }}>
               {(() => {
                 const train = trains.find(t => t.id === route.id);
+                const locoOwned = ownedLocomotives.find(l => l.uid === route.locomotiveUid);
                 return train ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <LocomotiveIcon color={train.color} size={56}/>
+                    <LocomotiveIcon color={train.color} size={56} catalogId={locoOwned?.catalogId ?? 'americ'}/>
                     <div>
                       <div className="display uppercase gold" style={{ fontSize: 12 }}>{train.name}</div>
                       <div className="body-serif" style={{ fontSize: 11, color: '#a88238', fontStyle: 'italic' }}>{train.model}</div>
