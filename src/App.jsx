@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useGameStore } from './store/gameStore.js';
+import { ThemeProvider } from './context/ThemeContext.jsx';
 import { TitleBar } from './components/chrome/TitleBar.jsx';
 import { Ticker } from './components/chrome/Ticker.jsx';
 import { MapScreen } from './components/screens/MapScreen.jsx';
@@ -10,7 +11,7 @@ import { NEWS } from './data/news.js';
 
 const COMPANY_STATIC = { name: 'GREAT NORTHERN & PACIFIC', founded: 1863 };
 
-export default function App() {
+function AppInner() {
   const cash        = useGameStore(s => s.cash);
   const year        = useGameStore(s => s.year);
   const month       = useGameStore(s => s.month);
@@ -40,5 +41,13 @@ export default function App() {
       {screen === 'track' && <TrackLayingScreen onBack={() => navigate('map')} />}
       <Ticker items={NEWS} />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppInner />
+    </ThemeProvider>
   );
 }
