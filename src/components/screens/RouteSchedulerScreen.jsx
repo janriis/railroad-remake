@@ -10,15 +10,15 @@ function FinStat({ label, value, accent }) {
   return (
     <div style={{ textAlign: 'right' }}>
       <Label>{label}</Label>
-      <div className="numeric" style={{ fontSize: 16, color: accent ? '#6bbf5a' : '#f0d896' }}>{value}</div>
+      <div className="numeric" style={{ fontSize: 16, color: accent ? 'var(--green)' : 'var(--text-primary)' }}>{value}</div>
     </div>
   );
 }
 
 function RouteBuilder({ onDone, onCancel }) {
-  const tracks          = useGameStore(s => s.tracks);
+  const tracks           = useGameStore(s => s.tracks);
   const ownedLocomotives = useGameStore(s => s.ownedLocomotives);
-  const createRoute     = useGameStore(s => s.createRoute);
+  const createRoute      = useGameStore(s => s.createRoute);
   const [stops, setStops]   = useState([]);
   const [locoUid, setLocoUid] = useState('');
   const [error, setError]   = useState('');
@@ -54,11 +54,11 @@ function RouteBuilder({ onDone, onCancel }) {
         <Label>Stops</Label>
         <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
           {stops.map((id, i) => (
-            <span key={i} style={{ padding: '3px 10px', background: 'linear-gradient(180deg,#6a4a28,#3a1f18)', border: '1px solid #c49a44', color: '#f0d896', fontFamily: 'IM Fell English SC', fontSize: 12 }}>
+            <span key={i} style={{ padding: '3px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--accent)', color: 'var(--text-primary)', fontFamily: 'IM Fell English SC', fontSize: 12 }}>
               {cityById(id).name}
             </span>
           ))}
-          {stops.length > 0 && <span className="gold-dim" style={{ fontSize: 18 }}>→</span>}
+          {stops.length > 0 && <span style={{ color: 'var(--accent)', fontSize: 18 }}>→</span>}
           <select className="field-parchment" style={{ minWidth: 160 }}
                   value="" onChange={e => { if (e.target.value) setStops(s => [...s, e.target.value]); }}>
             <option value="">Add stop…</option>
@@ -76,7 +76,7 @@ function RouteBuilder({ onDone, onCancel }) {
       <div style={{ marginBottom: 12 }}>
         <Label>Locomotive</Label>
         {idleLocos.length === 0 ? (
-          <div className="body-serif" style={{ fontSize: 12, color: '#c85040', marginTop: 6 }}>No idle locomotives — buy one in Locomotive Works.</div>
+          <div className="body-serif" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--red)', marginTop: 6 }}>No idle locomotives — buy one in Locomotive Works.</div>
         ) : (
           <select className="field-parchment" style={{ marginTop: 6, width: '100%' }}
                   value={locoUid} onChange={e => setLocoUid(e.target.value)}>
@@ -86,7 +86,7 @@ function RouteBuilder({ onDone, onCancel }) {
         )}
       </div>
 
-      {error && <div style={{ color: '#c85040', fontSize: 12, marginBottom: 8 }}>{error}</div>}
+      {error && <div style={{ color: 'var(--red)', fontSize: 'var(--font-size-sm)', marginBottom: 8 }}>{error}</div>}
 
       <div style={{ display: 'flex', gap: 8 }}>
         <button className="btn-brass" style={{ flex: 1 }} onClick={handleDispatch}>Dispatch</button>
@@ -107,34 +107,32 @@ export function RouteSchedulerScreen({ onBack }) {
   const route = routes.find(r => r.id === selectedId);
 
   return (
-    <div style={{ flex: 1, display: 'flex', minHeight: 0, background: '#0a0604' }}>
-      {/* Left: route list */}
-      <div className="wood-dark" style={{ width: 280, borderRight: '1px solid #1a0c08', padding: 14, display: 'flex', flexDirection: 'column', gap: 10, overflow: 'auto' }}>
-        <div className="display uppercase gold" style={{ fontSize: 13, letterSpacing: '0.2em', textAlign: 'center', padding: '8px 0', borderBottom: '1px solid rgba(196,154,68,0.3)' }}>⚜ Standing Orders ⚜</div>
+    <div style={{ flex: 1, display: 'flex', minHeight: 0, background: 'var(--bg-base)' }}>
+      <div className="wood-dark" style={{ width: 280, borderRight: '1px solid var(--border-strong)', padding: 14, display: 'flex', flexDirection: 'column', gap: 10, overflow: 'auto' }}>
+        <div className="display uppercase gold" style={{ fontSize: 13, letterSpacing: '0.2em', textAlign: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>⚜ Standing Orders ⚜</div>
 
         {routes.map(r => (
           <div key={r.id} onClick={() => { setSelectedId(r.id); setBuilding(false); }}
-               style={{ padding: 10, cursor: 'pointer', background: selectedId === r.id ? 'linear-gradient(180deg,#6a4a28,#3a1f18)' : 'linear-gradient(180deg,#3a1f18,#2a1510)', border: selectedId === r.id ? '1px solid #c49a44' : '1px solid #1a0c08' }}>
-            <div className="display uppercase" style={{ fontSize: 12, color: '#f0d896', letterSpacing: '0.12em' }}>{r.name}</div>
-            <div className="body-serif" style={{ fontSize: 11, color: '#a88238', fontStyle: 'italic', marginTop: 2 }}>
+               style={{ padding: 10, cursor: 'pointer', background: selectedId === r.id ? 'var(--bg-elevated)' : 'var(--bg-surface)', border: selectedId === r.id ? '1px solid var(--accent)' : '1px solid var(--border-strong)' }}>
+            <div className="display uppercase" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-primary)', letterSpacing: '0.12em' }}>{r.name}</div>
+            <div className="body-serif" style={{ fontSize: 'var(--font-size-label)', color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: 2 }}>
               {r.stops.map(id => cityById(id).name).join(' → ')}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-              <span style={{ padding: '1px 6px', background: r.status === 'running' ? '#3d5c2a' : '#6a4a28', color: '#f0d896', fontFamily: 'IM Fell English SC', fontSize: 9 }}>{r.status.toUpperCase()}</span>
-              <span className="numeric" style={{ fontSize: 11, color: '#6bbf5a' }}>+${(r.revenuePerTick/1000).toFixed(1)}K/tick</span>
+              <span style={{ padding: '1px 6px', background: r.status === 'running' ? '#3d5c2a' : '#6a4a28', color: 'var(--text-primary)', fontFamily: 'IM Fell English SC', fontSize: 9 }}>{r.status.toUpperCase()}</span>
+              <span className="numeric" style={{ fontSize: 'var(--font-size-label)', color: 'var(--green)' }}>+${(r.revenuePerTick/1000).toFixed(1)}K/tick</span>
             </div>
           </div>
         ))}
 
         {routes.length === 0 && !building && (
-          <div className="body-serif" style={{ fontSize: 12, color: '#a88238', fontStyle: 'italic', textAlign: 'center', padding: 12 }}>No routes yet. Buy a locomotive, then create a route.</div>
+          <div className="body-serif" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)', fontStyle: 'italic', textAlign: 'center', padding: 12 }}>No routes yet. Buy a locomotive, then create a route.</div>
         )}
 
         <button className="btn-brass" style={{ marginTop: 4 }} onClick={() => { setBuilding(true); setSelectedId(null); }}>+ New Route</button>
         <button className="btn-brass" onClick={onBack} style={{ marginTop: 'auto' }}>← Return to Map</button>
       </div>
 
-      {/* Right: detail / builder */}
       <div style={{ flex: 1, padding: 20, overflow: 'auto' }}>
         {building && (
           <RouteBuilder onDone={() => setBuilding(false)} onCancel={() => setBuilding(false)} />
@@ -150,8 +148,8 @@ export function RouteSchedulerScreen({ onBack }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <LocomotiveIcon color={train.color} size={56} catalogId={locoOwned?.catalogId ?? 'americ'}/>
                     <div>
-                      <div className="display uppercase gold" style={{ fontSize: 12 }}>{train.name}</div>
-                      <div className="body-serif" style={{ fontSize: 11, color: '#a88238', fontStyle: 'italic' }}>{train.model}</div>
+                      <div className="display uppercase gold" style={{ fontSize: 'var(--font-size-sm)' }}>{train.name}</div>
+                      <div className="body-serif" style={{ fontSize: 'var(--font-size-label)', color: 'var(--text-secondary)', fontStyle: 'italic' }}>{train.model}</div>
                     </div>
                   </div>
                 ) : null;
@@ -163,37 +161,29 @@ export function RouteSchedulerScreen({ onBack }) {
 
             <DividerDots />
 
-            {/* Schedule tape */}
-            <div style={{ background: 'linear-gradient(180deg,rgba(26,12,8,0.5),rgba(42,21,16,0.5))', border: '1px solid #1a0c08', padding: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'stretch', position: 'relative' }}>
-                <div style={{ position: 'absolute', top: 28, left: 20, right: 20, height: 4, background: 'linear-gradient(180deg,#8b6a30,#4a2a1f)' }}/>
-                {route.stops.map((stopId, i) => {
-                  const c = cityById(stopId);
-                  return (
-                    <div key={i} style={{ flex: 1, textAlign: 'center', position: 'relative' }}>
-                      <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'radial-gradient(circle at 30% 30%,#f0d896,#8b6a30 60%,#3a1f18)', border: '2px solid #1a0c08', margin: '20px auto 0', position: 'relative', zIndex: 1 }}/>
-                      <div className="display uppercase" style={{ fontSize: 12, color: '#f0d896', letterSpacing: '0.12em', marginTop: 8 }}>{c.name}</div>
-                    </div>
-                  );
-                })}
+            <div style={{ marginBottom: 12 }}>
+              <Label>Stops</Label>
+              <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                {route.stops.map((id, i) => (
+                  <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ padding: '3px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontFamily: 'IM Fell English SC', fontSize: 12 }}>
+                      {cityById(id).name}
+                    </span>
+                    {i < route.stops.length - 1 && <span style={{ color: 'var(--accent)', fontSize: 16 }}>→</span>}
+                  </span>
+                ))}
               </div>
             </div>
 
-            <DividerDots />
-
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn-brass" onClick={() => suspendRoute(route.id)}
-                      disabled={route.status === 'suspended'}>
-                {route.status === 'suspended' ? 'Suspended' : 'Suspend'}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn-brass"
+                      style={{ flex: 1 }}
+                      disabled={route.status === 'suspended'}
+                      onClick={() => suspendRoute(route.id)}>
+                ⏸ Suspend Route
               </button>
             </div>
           </Panel>
-        )}
-
-        {!building && !route && routes.length === 0 && (
-          <div style={{ display: 'grid', placeItems: 'center', height: '100%', color: '#a88238' }}>
-            <div className="body-serif" style={{ fontSize: 16, fontStyle: 'italic' }}>Click "+ New Route" to create your first route.</div>
-          </div>
         )}
       </div>
     </div>
