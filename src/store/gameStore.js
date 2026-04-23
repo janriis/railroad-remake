@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { CITIES, cityById } from '../data/cities';
 import { INITIAL_TRACKS } from '../data/tracks';
 import { INITIAL_TRAINS } from '../data/trains';
@@ -40,114 +41,124 @@ export const INITIAL_STATE = {
   version: 1,
 };
 
-export const useGameStore = create((set, get) => ({
-  ...INITIAL_STATE,
+export const useGameStore = create(
+  persist(
+    (set, get) => ({
+      ...INITIAL_STATE,
 
-  navigate: (screen) => set({ screen, selectedCityId: null, focusTrainId: null }),
-  selectCity: (id) => set({ selectedCityId: id, focusTrainId: null }),
-  selectTrain: (id) => set({ focusTrainId: id, selectedCityId: null }),
-  startTrackLaying: (fromId) => set({ trackLayingFrom: fromId, selectedCityId: null }),
-  cancelTrackLaying: () => set({ trackLayingFrom: null }),
+      navigate: (screen) => set({ screen, selectedCityId: null, focusTrainId: null }),
+      selectCity: (id) => set({ selectedCityId: id, focusTrainId: null }),
+      selectTrain: (id) => set({ focusTrainId: id, selectedCityId: null }),
+      startTrackLaying: (fromId) => set({ trackLayingFrom: fromId, selectedCityId: null }),
+      cancelTrackLaying: () => set({ trackLayingFrom: null }),
 
-  trackCost: (fromId, toId) => {
-    const a = cityById(fromId);
-    const b = cityById(toId);
-    if (!a || !b) return 0;
-    return Math.round(Math.hypot(b.x - a.x, b.y - a.y) * TRACK_COST_PER_PIXEL);
-  },
+      trackCost: (fromId, toId) => {
+        const a = cityById(fromId);
+        const b = cityById(toId);
+        if (!a || !b) return 0;
+        return Math.round(Math.hypot(b.x - a.x, b.y - a.y) * TRACK_COST_PER_PIXEL);
+      },
 
-  layTrack: (fromId, toId) => {
-    const { tracks, cash, trackCost } = get();
-    const cost = trackCost(fromId, toId);
-    const duplicate = tracks.some(t =>
-      (t.a === fromId && t.b === toId) || (t.a === toId && t.b === fromId)
-    );
-    if (duplicate || cash < cost) return false;
-    set(s => ({
-      tracks: [...s.tracks, { a: fromId, b: toId, owner: 'player' }],
-      cash: s.cash - cost,
-      trackLayingFrom: null,
-    }));
-    return true;
-  },
+      layTrack: (fromId, toId) => {
+        const { tracks, cash, trackCost } = get();
+        const cost = trackCost(fromId, toId);
+        const duplicate = tracks.some(t =>
+          (t.a === fromId && t.b === toId) || (t.a === toId && t.b === fromId)
+        );
+        if (duplicate || cash < cost) return false;
+        set(s => ({
+          tracks: [...s.tracks, { a: fromId, b: toId, owner: 'player' }],
+          cash: s.cash - cost,
+          trackLayingFrom: null,
+        }));
+        return true;
+      },
 
-  buyLocomotive: (catalogId, qty = 1) => {
-    const { cash, ownedLocomotives } = get();
-    const loco = LOCOMOTIVES.find(l => l.id === catalogId);
-    if (!loco || loco.availability !== 'Available' || cash < loco.price * qty) return null;
-    const uids = [];
-    const newLocos = [];
-    for (let i = 0; i < qty; i++) {
-      const uid = `L-${_locoCounter++}`;
-      uids.push(uid);
-      newLocos.push({
-        uid,
-        catalogId,
-        name: loco.name,
-        color: TRAIN_COLORS[(ownedLocomotives.length + i) % TRAIN_COLORS.length],
-        assignedRouteId: null,
-      });
+      buyLocomotive: (catalogId, qty = 1) => {
+        const { cash, ownedLocomotives } = get();
+        const loco = LOCOMOTIVES.find(l => l.id === catalogId);
+        if (!loco || loco.availability !== 'Available' || cash < loco.price * qty) return null;
+        const uids = [];
+        const newLocos = [];
+        for (let i = 0; i < qty; i++) {
+          const uid = `L-${_locoCounter++}`;
+          uids.push(uid);
+          newLocos.push({
+            uid,
+            catalogId,
+            name: loco.name,
+            color: TRAIN_COLORS[(ownedLocomotives.length + i) % TRAIN_COLORS.length],
+            assignedRouteId: null,
+          });
+        }
+        set(s => ({
+          cash: s.cash - loco.price * qty,
+          ownedLocomotives: [...s.ownedLocomotives, ...newLocos],
+        }));
+        return uids;
+      },
+
+      createRoute: (stops, locomotiveUid) => {
+        const { tracks, ownedLocomotives } = get();
+        for (let i = 0; i < stops.length - 1; i++) {
+          const ok = tracks.some(t =>
+            t.owner === 'player' &&
+            ((t.a === stops[i] && t.b === stops[i + 1]) ||
+             (t.a === stops[i + 1] && t.b === stops[i]))
+          );
+          if (!ok) return null;
+        }
+        const loco = ownedLocomotives.find(l => l.uid === locomotiveUid && l.assignedRouteId === null);
+        if (!loco) return null;
+        const routeId = `R-${_routeCounter++}`;
+        const newTrain = {
+          id: routeId,
+          name: loco.name,
+          model: LOCOMOTIVES.find(l => l.id === loco.catalogId)?.name ?? loco.name,
+          route: stops,
+          leg: 0,
+          progress: 0,
+          speed: 0.00042,
+          cars: ['passenger', 'mail'],
+          color: loco.color,
+        };
+        set(s => ({
+          routes: [...s.routes, {
+            id: routeId,
+            name: `Route #${_routeCounter - 1}`,
+            stops,
+            locomotiveUid,
+            status: 'running',
+            revenuePerTick: stops.length * 800,
+          }],
+          trains: [...s.trains, newTrain],
+          ownedLocomotives: s.ownedLocomotives.map(l =>
+            l.uid === locomotiveUid ? { ...l, assignedRouteId: routeId } : l
+          ),
+        }));
+        return routeId;
+      },
+
+      suspendRoute: (routeId) => {
+        set(s => ({
+          routes: s.routes.map(r => r.id === routeId ? { ...r, status: 'suspended' } : r),
+        }));
+      },
+
+      tickRevenue: () => {
+        set(s => {
+          const earned = s.routes
+            .filter(r => r.status === 'running')
+            .reduce((acc, r) => acc + r.revenuePerTick, 0);
+          return earned > 0 ? { cash: s.cash + earned } : s;
+        });
+      },
+    }),
+    {
+      name: 'iron-empire-save',
+      version: 1,
+      migrate: (_persistedState, _version) => ({ ...INITIAL_STATE }),
+      onRehydrateStorage: () => (state) => hydrateCounters(state),
     }
-    set(s => ({
-      cash: s.cash - loco.price * qty,
-      ownedLocomotives: [...s.ownedLocomotives, ...newLocos],
-    }));
-    return uids;
-  },
-
-  createRoute: (stops, locomotiveUid) => {
-    const { tracks, ownedLocomotives } = get();
-    for (let i = 0; i < stops.length - 1; i++) {
-      const ok = tracks.some(t =>
-        t.owner === 'player' &&
-        ((t.a === stops[i] && t.b === stops[i + 1]) ||
-         (t.a === stops[i + 1] && t.b === stops[i]))
-      );
-      if (!ok) return null;
-    }
-    const loco = ownedLocomotives.find(l => l.uid === locomotiveUid && l.assignedRouteId === null);
-    if (!loco) return null;
-    const routeId = `R-${_routeCounter++}`;
-    const newTrain = {
-      id: routeId,
-      name: loco.name,
-      model: LOCOMOTIVES.find(l => l.id === loco.catalogId)?.name ?? loco.name,
-      route: stops,
-      leg: 0,
-      progress: 0,
-      speed: 0.00042,
-      cars: ['passenger', 'mail'],
-      color: loco.color,
-    };
-    set(s => ({
-      routes: [...s.routes, {
-        id: routeId,
-        name: `Route #${_routeCounter - 1}`,
-        stops,
-        locomotiveUid,
-        status: 'running',
-        revenuePerTick: stops.length * 800,
-      }],
-      trains: [...s.trains, newTrain],
-      ownedLocomotives: s.ownedLocomotives.map(l =>
-        l.uid === locomotiveUid ? { ...l, assignedRouteId: routeId } : l
-      ),
-    }));
-    return routeId;
-  },
-
-  suspendRoute: (routeId) => {
-    set(s => ({
-      routes: s.routes.map(r => r.id === routeId ? { ...r, status: 'suspended' } : r),
-    }));
-  },
-
-  tickRevenue: () => {
-    set(s => {
-      const earned = s.routes
-        .filter(r => r.status === 'running')
-        .reduce((acc, r) => acc + r.revenuePerTick, 0);
-      return earned > 0 ? { cash: s.cash + earned } : s;
-    });
-  },
-}));
+  )
+);
