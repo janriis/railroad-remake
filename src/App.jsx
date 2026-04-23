@@ -3,6 +3,7 @@ import { useGameStore } from './store/gameStore.js';
 import { TitleBar } from './components/chrome/TitleBar.jsx';
 import { Ticker } from './components/chrome/Ticker.jsx';
 import { MapScreen } from './components/screens/MapScreen.jsx';
+import { DepotScreen } from './components/screens/DepotScreen.jsx';
 import { NEWS } from './data/news.js';
 
 const COMPANY_STATIC = { name: 'GREAT NORTHERN & PACIFIC', founded: 1863 };
@@ -32,7 +33,7 @@ export default function App() {
         onToggleHUD={() => setHudVisible(v => !v)}
       />
       {screen === 'map'   && <MapScreen hudVisible={hudVisible} />}
-      {screen === 'depot' && <div style={{ flex: 1, color: '#f0d896', display: 'grid', placeItems: 'center' }}>Depot coming soon</div>}
+      {screen === 'depot' && <DepotScreen onBack={() => navigate('map')} />}
       {screen === 'route' && <div style={{ flex: 1, color: '#f0d896', display: 'grid', placeItems: 'center' }}>Dispatch coming soon</div>}
       {screen === 'track' && <div style={{ flex: 1, color: '#f0d896', display: 'grid', placeItems: 'center' }}>Track screen coming soon</div>}
       <Ticker items={NEWS} />
