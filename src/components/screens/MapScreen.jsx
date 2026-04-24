@@ -43,7 +43,7 @@ export function MapScreen({ hudVisible }) {
 
           {/* Bottom action dock */}
           <div style={{ position: 'absolute', bottom: 14, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 8, padding: 8, background: 'linear-gradient(180deg, #3a1f18, #1a0c08)', border: '1px solid #1a0c08', boxShadow: 'inset 0 1px 0 rgba(255,200,140,0.15), 0 4px 12px rgba(0,0,0,0.6)' }}>
-            <button className="btn-brass" onClick={() => startTrackLaying(null)}>⚿ Lay Track</button>
+            <button className="btn-brass" onClick={() => navigate('track')}>⚿ Lay Track</button>
             <button className="btn-brass" onClick={() => navigate('depot')}>⚙ Locomotive Works</button>
             <button className="btn-brass" onClick={() => navigate('route')}>✒ Dispatch</button>
             <div style={{ width: 1, background: '#1a0c08', margin: '0 4px' }}/>
