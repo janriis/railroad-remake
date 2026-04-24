@@ -4,19 +4,9 @@ import { Panel } from '../chrome/Panel.jsx';
 import { LocomotiveIcon, BigLocomotiveEngraving } from '../icons/index.js';
 import { Label, DividerDots } from '../hud/helpers.jsx';
 import { LOCOMOTIVES } from '../../data/locomotives.js';
-import grasshopperImg from '../../images/grashopper.png';
-import mogulImg from '../../images/mogul.png';
-import tenWheelerImg from '../../images/ten-wheeler.png';
-import americanImg from '../../images/American.png';
-import consolidationImg from '../../images/Consolidation.png';
 
-const LOCO_PHOTOS = {
-  grasshop: grasshopperImg,
-  americ:   americanImg,
-  mogul:    mogulImg,
-  tenwh:    tenWheelerImg,
-  consol:   consolidationImg,
-};
+// Locomotive photos — add imports here when image files are available in src/images/
+const LOCO_PHOTOS = {};
 
 function Spec({ label, value }) {
   return (
