@@ -6,10 +6,12 @@ import { Label, DividerDots } from '../hud/helpers.jsx';
 import { LOCOMOTIVES } from '../../data/locomotives.js';
 import grasshopperImg from '../../images/grashopper.png';
 import mogulImg from '../../images/mogul.png';
+import tenWheelerImg from '../../images/ten-wheeler.png';
 
 const LOCO_PHOTOS = {
   grasshop: grasshopperImg,
   mogul:    mogulImg,
+  tenwh:    tenWheelerImg,
 };
 
 function Spec({ label, value }) {
