@@ -7,9 +7,11 @@ import { LOCOMOTIVES } from '../../data/locomotives.js';
 import grasshopperImg from '../../images/grashopper.png';
 import mogulImg from '../../images/mogul.png';
 import tenWheelerImg from '../../images/ten-wheeler.png';
+import americanImg from '../../images/American.png';
 
 const LOCO_PHOTOS = {
   grasshop: grasshopperImg,
+  americ:   americanImg,
   mogul:    mogulImg,
   tenwh:    tenWheelerImg,
 };
