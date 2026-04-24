@@ -5,6 +5,7 @@ import { LocomotiveIcon } from '../icons/index.js';
 import { Label, DividerDots } from '../hud/helpers.jsx';
 import { CITIES, cityById } from '../../data/cities.js';
 import { LOCOMOTIVES } from '../../data/locomotives.js';
+import dispatchOfficeImg from '../../images/dispatch-office.png';
 
 function FinStat({ label, value, accent }) {
   return (
@@ -136,6 +137,10 @@ export function RouteSchedulerScreen({ onBack }) {
 
       {/* Right: detail / builder */}
       <div style={{ flex: 1, padding: 20, overflow: 'auto' }}>
+        <div style={{ marginBottom: 20, borderRadius: 2, overflow: 'hidden' }}>
+          <img src={dispatchOfficeImg} alt="Dispatch Office" style={{ width: '100%', height: 200, objectFit: 'cover', objectPosition: 'center', display: 'block' }} />
+        </div>
+
         {building && (
           <RouteBuilder onDone={() => setBuilding(false)} onCancel={() => setBuilding(false)} />
         )}
