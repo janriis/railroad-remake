@@ -1,5 +1,12 @@
 export const LOCOMOTIVES = [
   {
+    id: 'grasshop', name: '0-4-0 "Grasshopper"', years: '1832–1860',
+    price: 6500, maxSpeed: 25, power: 'Low', reliability: 'Medium',
+    best: 'Short Haul', era: 'Pioneer',
+    description: "The Baltimore & Ohio's famous vertical-boiler curiosity. An antique that turns heads at every depot — though her fireman earns his keep.",
+    availability: 'Available',
+  },
+  {
     id: 'americ', name: '4-4-0 "American"', years: '1860–1880',
     price: 18500, maxSpeed: 60, power: 'Medium', reliability: 'High',
     best: 'Passenger', era: 'Golden Age',

@@ -4,6 +4,9 @@ import { Panel } from '../chrome/Panel.jsx';
 import { LocomotiveIcon, BigLocomotiveEngraving } from '../icons/index.js';
 import { Label, DividerDots } from '../hud/helpers.jsx';
 import { LOCOMOTIVES } from '../../data/locomotives.js';
+import grasshopperImg from '../../images/grashopper.png';
+
+const LOCO_PHOTOS = { grasshop: grasshopperImg };
 
 function Spec({ label, value }) {
   return (
@@ -84,9 +87,19 @@ export function DepotScreen({ onBack }) {
       {/* Right: detail */}
       <div style={{ flex: 1, padding: 24, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
         <Panel title={loco.name}>
-          {/* Hero engraving */}
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16, padding: 12, background: 'rgba(0,0,0,0.3)', borderRadius: 2 }}>
-            <BigLocomotiveEngraving color={available ? '#c49a44' : '#6a6a5a'} catalogId={loco.id} />
+          {/* Hero image or engraving */}
+          <div style={{ marginBottom: 16, borderRadius: 2, overflow: 'hidden', background: 'rgba(0,0,0,0.3)' }}>
+            {LOCO_PHOTOS[loco.id] ? (
+              <img
+                src={LOCO_PHOTOS[loco.id]}
+                alt={loco.name}
+                style={{ width: '100%', height: 200, objectFit: 'cover', objectPosition: 'center', display: 'block', opacity: available ? 1 : 0.5 }}
+              />
+            ) : (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: 12 }}>
+                <BigLocomotiveEngraving color={available ? '#c49a44' : '#6a6a5a'} catalogId={loco.id} />
+              </div>
+            )}
           </div>
 
           {/* Era badge + years */}
