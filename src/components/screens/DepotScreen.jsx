@@ -8,12 +8,14 @@ import grasshopperImg from '../../images/grashopper.png';
 import mogulImg from '../../images/mogul.png';
 import tenWheelerImg from '../../images/ten-wheeler.png';
 import americanImg from '../../images/American.png';
+import consolidationImg from '../../images/Consolidation.png';
 
 const LOCO_PHOTOS = {
   grasshop: grasshopperImg,
   americ:   americanImg,
   mogul:    mogulImg,
   tenwh:    tenWheelerImg,
+  consol:   consolidationImg,
 };
 
 function Spec({ label, value }) {
