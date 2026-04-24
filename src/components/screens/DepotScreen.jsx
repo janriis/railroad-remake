@@ -5,8 +5,12 @@ import { LocomotiveIcon, BigLocomotiveEngraving } from '../icons/index.js';
 import { Label, DividerDots } from '../hud/helpers.jsx';
 import { LOCOMOTIVES } from '../../data/locomotives.js';
 import grasshopperImg from '../../images/grashopper.png';
+import mogulImg from '../../images/mogul.png';
 
-const LOCO_PHOTOS = { grasshop: grasshopperImg };
+const LOCO_PHOTOS = {
+  grasshop: grasshopperImg,
+  mogul:    mogulImg,
+};
 
 function Spec({ label, value }) {
   return (
