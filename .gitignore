@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Local env files
+.env.local
+.env.*.local
+
+# Vite
+.vite/
+
+# Git worktrees
+.worktrees/
+
+# Editor directories and files
+.DS_Store
+*.local

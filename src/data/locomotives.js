@@ -1,0 +1,37 @@
+export const LOCOMOTIVES = [
+  {
+    id: 'americ', name: '4-4-0 "American"', years: '1860–1880',
+    price: 18500, maxSpeed: 60, power: 'Medium', reliability: 'High',
+    best: 'Passenger', era: 'Golden Age',
+    description: 'The most common locomotive of the Civil War era. Versatile, reliable, and handsome in her livery.',
+    availability: 'Available',
+  },
+  {
+    id: 'mogul', name: '2-6-0 "Mogul"', years: '1866–1890',
+    price: 24800, maxSpeed: 45, power: 'High', reliability: 'High',
+    best: 'Freight', era: 'Golden Age',
+    description: 'A brute of a freight hauler. Six driving wheels give her tremendous pulling power over the plains.',
+    availability: 'Available',
+  },
+  {
+    id: 'tenwh', name: '4-6-0 "Ten-Wheeler"', years: '1868–1895',
+    price: 31200, maxSpeed: 55, power: 'High', reliability: 'Medium',
+    best: 'Mixed', era: 'Golden Age',
+    description: 'A compromise between speed and tractive force. Popular with express lines hauling long trains.',
+    availability: 'Available',
+  },
+  {
+    id: 'consol', name: '2-8-0 "Consolidation"', years: '1866–1900',
+    price: 38400, maxSpeed: 40, power: 'Very High', reliability: 'High',
+    best: 'Coal & Ore', era: 'Industrial',
+    description: 'Eight driving wheels of iron fury. She will drag a mountain over the Rockies if you ask her.',
+    availability: 'Available',
+  },
+  {
+    id: 'atlan', name: '4-4-2 "Atlantic"', years: '1888–1910',
+    price: 52000, maxSpeed: 85, power: 'Medium', reliability: 'Medium',
+    best: 'Express Passenger', era: 'Modern',
+    description: 'Latest from the Baldwin works. The fastest wheels in the west — and twice as expensive.',
+    availability: 'Awaiting 1888',
+  },
+];
