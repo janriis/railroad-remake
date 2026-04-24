@@ -157,7 +157,14 @@ export const useGameStore = create(
     {
       name: 'iron-empire-save',
       version: 1,
-      migrate: (_persistedState, _version) => ({ ...INITIAL_STATE }),
+      migrate: (persistedState, version) => {
+        if (version === 0) {
+          // v0 → v1: spread persisted state with v1 defaults so existing saves survive
+          return { ...INITIAL_STATE, ...persistedState, version: 1 };
+        }
+        // Unknown future version — wipe as last resort
+        return { ...INITIAL_STATE };
+      },
       onRehydrateStorage: () => (state) => hydrateCounters(state),
     }
   )

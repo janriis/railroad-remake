@@ -55,7 +55,7 @@ function RouteBuilder({ onDone, onCancel }) {
         <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
           {stops.map((id, i) => (
             <span key={i} style={{ padding: '3px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--accent)', color: 'var(--text-primary)', fontFamily: 'IM Fell English SC', fontSize: 12 }}>
-              {cityById(id).name}
+              {cityById(id)?.name ?? id}
             </span>
           ))}
           {stops.length > 0 && <span style={{ color: 'var(--accent)', fontSize: 18 }}>→</span>}
@@ -116,7 +116,7 @@ export function RouteSchedulerScreen({ onBack }) {
                style={{ padding: 10, cursor: 'pointer', background: selectedId === r.id ? 'var(--bg-elevated)' : 'var(--bg-surface)', border: selectedId === r.id ? '1px solid var(--accent)' : '1px solid var(--border-strong)' }}>
             <div className="display uppercase" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-primary)', letterSpacing: '0.12em' }}>{r.name}</div>
             <div className="body-serif" style={{ fontSize: 'var(--font-size-label)', color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: 2 }}>
-              {r.stops.map(id => cityById(id).name).join(' → ')}
+              {r.stops.map(id => cityById(id)?.name ?? id).join(' → ')}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
               <span style={{ padding: '1px 6px', background: r.status === 'running' ? '#3d5c2a' : '#6a4a28', color: 'var(--text-primary)', fontFamily: 'IM Fell English SC', fontSize: 9 }}>{r.status.toUpperCase()}</span>
@@ -167,7 +167,7 @@ export function RouteSchedulerScreen({ onBack }) {
                 {route.stops.map((id, i) => (
                   <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ padding: '3px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontFamily: 'IM Fell English SC', fontSize: 12 }}>
-                      {cityById(id).name}
+                      {cityById(id)?.name ?? id}
                     </span>
                     {i < route.stops.length - 1 && <span style={{ color: 'var(--accent)', fontSize: 16 }}>→</span>}
                   </span>
