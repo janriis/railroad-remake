@@ -159,8 +159,20 @@ export const useGameStore = create(
       version: 1,
       migrate: (persistedState, version) => {
         if (version === 0) {
-          // v0 → v1: spread persisted state with v1 defaults so existing saves survive
-          return { ...INITIAL_STATE, ...persistedState, version: 1 };
+          // v0 → v1: explicitly migrate safe fields; reset trains (re-derived from routes)
+          return {
+            ...INITIAL_STATE,
+            cash: persistedState.cash ?? INITIAL_STATE.cash,
+            netWorth: persistedState.netWorth ?? INITIAL_STATE.netWorth,
+            year: persistedState.year ?? INITIAL_STATE.year,
+            month: persistedState.month ?? INITIAL_STATE.month,
+            tracks: persistedState.tracks ?? INITIAL_STATE.tracks,
+            ownedLocomotives: persistedState.ownedLocomotives ?? INITIAL_STATE.ownedLocomotives,
+            routes: persistedState.routes ?? INITIAL_STATE.routes,
+            // trains re-derived from routes at runtime — v0 entries may lack v1 fields
+            trains: INITIAL_TRAINS.map(t => ({ ...t })),
+            version: 1,
+          };
         }
         // Unknown future version — wipe as last resort
         return { ...INITIAL_STATE };
