@@ -159,7 +159,25 @@ export const useGameStore = create(
       version: 1,
       migrate: (persistedState, version) => {
         if (version === 0) {
-          // v0 → v1: explicitly migrate safe fields; reset trains (re-derived from routes)
+          const routes = persistedState.routes ?? [];
+          const ownedLocomotives = persistedState.ownedLocomotives ?? [];
+
+          // Re-derive trains from persisted routes, mirroring createRoute logic
+          const trains = routes.map(route => {
+            const loco = ownedLocomotives.find(l => l.uid === route.locomotiveUid);
+            return {
+              id: route.id,
+              name: loco?.name ?? 'Unknown',
+              model: LOCOMOTIVES.find(l => l.id === loco?.catalogId)?.name ?? loco?.name ?? 'Unknown',
+              route: route.stops,
+              leg: 0,
+              progress: 0,
+              speed: 0.00042,
+              cars: ['passenger', 'mail'],
+              color: loco?.color ?? '#c49a44',
+            };
+          });
+
           return {
             ...INITIAL_STATE,
             cash: persistedState.cash ?? INITIAL_STATE.cash,
@@ -167,10 +185,9 @@ export const useGameStore = create(
             year: persistedState.year ?? INITIAL_STATE.year,
             month: persistedState.month ?? INITIAL_STATE.month,
             tracks: persistedState.tracks ?? INITIAL_STATE.tracks,
-            ownedLocomotives: persistedState.ownedLocomotives ?? INITIAL_STATE.ownedLocomotives,
-            routes: persistedState.routes ?? INITIAL_STATE.routes,
-            // trains re-derived from routes at runtime — v0 entries may lack v1 fields
-            trains: INITIAL_TRAINS.map(t => ({ ...t })),
+            ownedLocomotives,
+            routes,
+            trains,
             version: 1,
           };
         }
