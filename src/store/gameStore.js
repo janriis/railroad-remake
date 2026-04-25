@@ -4,12 +4,30 @@ import { CITIES, cityById } from '../data/cities';
 import { INITIAL_TRACKS } from '../data/tracks';
 import { INITIAL_TRAINS } from '../data/trains';
 import { LOCOMOTIVES } from '../data/locomotives';
+import { GOODS, DEMAND_RECOVERY_RATE } from '../data/goods';
 
 const TRACK_COST_PER_PIXEL = 1990;
 const TRAIN_COLORS = ['#c49a44', '#8b2818', '#3d5c2a', '#1e3a5c', '#6b4a88', '#2a6b5c'];
 
 let _routeCounter = 1;
 let _locoCounter = 1;
+
+function buildInitialCityDemand() {
+  const result = {};
+  for (const city of CITIES) {
+    if (!city.demands?.length) continue;
+    result[city.id] = {};
+    for (const good of city.demands) result[city.id][good] = 50;
+  }
+  return result;
+}
+
+function resolveConsist(schedule, stopIndex) {
+  for (let i = stopIndex; i >= 0; i--) {
+    if (schedule[i] !== undefined) return schedule[i];
+  }
+  return ['passenger', 'mail'];
+}
 
 export function hydrateCounters(state) {
   if (!state) return;
@@ -38,7 +56,8 @@ export const INITIAL_STATE = {
   selectedCityId: null,
   focusTrainId: null,
   trackLayingFrom: null,
-  version: 1,
+  cityDemand: buildInitialCityDemand(),
+  version: 2,
 };
 
 export const useGameStore = create(
@@ -51,6 +70,19 @@ export const useGameStore = create(
       selectTrain: (id) => set({ focusTrainId: id, selectedCityId: null }),
       startTrackLaying: (fromId) => set({ trackLayingFrom: fromId, selectedCityId: null }),
       cancelTrackLaying: () => set({ trackLayingFrom: null }),
+
+      tickDemand: () => {
+        set(s => {
+          const next = {};
+          for (const [cityId, goods] of Object.entries(s.cityDemand)) {
+            next[cityId] = {};
+            for (const [good, val] of Object.entries(goods)) {
+              next[cityId][good] = Math.min(100, val + DEMAND_RECOVERY_RATE);
+            }
+          }
+          return { cityDemand: next };
+        });
+      },
 
       trackCost: (fromId, toId) => {
         const a = cityById(fromId);
@@ -156,7 +188,7 @@ export const useGameStore = create(
     }),
     {
       name: 'iron-empire-save',
-      version: 1,
+      version: 2,
       migrate: (_persistedState, _version) => ({ ...INITIAL_STATE }),
       onRehydrateStorage: () => (state) => hydrateCounters(state),
     }

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useGameStore, INITIAL_STATE, hydrateCounters } from './gameStore';
 import { INITIAL_TRACKS } from '../data/tracks';
 import { INITIAL_TRAINS } from '../data/trains';
+import { CITIES } from '../data/cities';
 
 function reset() {
   useGameStore.setState({
@@ -159,5 +160,41 @@ describe('hydrateCounters', () => {
   it('handles null/undefined state gracefully', () => {
     expect(() => hydrateCounters(null)).not.toThrow();
     expect(() => hydrateCounters(undefined)).not.toThrow();
+  });
+});
+
+describe('tickDemand', () => {
+  beforeEach(() => {
+    useGameStore.setState({ ...INITIAL_STATE });
+    hydrateCounters({ routes: [], ownedLocomotives: [] });
+  });
+
+  it('increases demand by DEMAND_RECOVERY_RATE for every demanded good at every city', () => {
+    const before = useGameStore.getState().cityDemand;
+    useGameStore.getState().tickDemand();
+    const after = useGameStore.getState().cityDemand;
+    // San Francisco demands freight — verify it rose
+    expect(after['sf']['freight']).toBe(before['sf']['freight'] + 3);
+  });
+
+  it('caps demand at 100', () => {
+    useGameStore.setState({
+      cityDemand: { sf: { freight: 99, coal: 100, cattle: 98 } },
+    });
+    useGameStore.getState().tickDemand();
+    const d = useGameStore.getState().cityDemand;
+    expect(d['sf']['freight']).toBe(100);
+    expect(d['sf']['coal']).toBe(100);
+    expect(d['sf']['cattle']).toBe(100);
+  });
+
+  it('initial cityDemand starts all demanded goods at 50', () => {
+    const d = useGameStore.getState().cityDemand;
+    // Chicago demands passenger, mail, cattle
+    expect(d['chi']['passenger']).toBe(50);
+    expect(d['chi']['mail']).toBe(50);
+    expect(d['chi']['cattle']).toBe(50);
+    // Chicago does not demand coal — should have no key
+    expect(d['chi']['coal']).toBeUndefined();
   });
 });
