@@ -4,7 +4,7 @@ import { CITIES, cityById } from '../data/cities';
 import { INITIAL_TRACKS } from '../data/tracks';
 import { INITIAL_TRAINS } from '../data/trains';
 import { LOCOMOTIVES } from '../data/locomotives';
-import { GOODS, DEMAND_RECOVERY_RATE } from '../data/goods';
+import { GOODS, DEMAND_RECOVERY_RATE, DEMAND_DROP_PER_CAR, TONS_RATE } from '../data/goods';
 
 const TRACK_COST_PER_PIXEL = 1990;
 const TRAIN_COLORS = ['#c49a44', '#8b2818', '#3d5c2a', '#1e3a5c', '#6b4a88', '#2a6b5c'];
@@ -27,6 +27,16 @@ function resolveConsist(schedule, stopIndex) {
     if (schedule[i] !== undefined) return schedule[i];
   }
   return ['passenger', 'mail'];
+}
+
+function maxStopTons(schedule, stopCount) {
+  let max = 0;
+  for (let i = 0; i < stopCount; i++) {
+    const consist = resolveConsist(schedule, i);
+    const tons = consist.reduce((s, t) => s + (GOODS.find(g => g.id === t)?.weight ?? 0), 0);
+    if (tons > max) max = tons;
+  }
+  return max;
 }
 
 export function hydrateCounters(state) {
@@ -212,12 +222,41 @@ export const useGameStore = create(
         }));
       },
 
-      tickRevenue: () => {
+      settleAllRoutes: () => {
         set(s => {
-          const earned = s.routes
-            .filter(r => r.status === 'running')
-            .reduce((acc, r) => acc + r.revenuePerTick, 0);
-          return earned > 0 ? { cash: s.cash + earned } : s;
+          const { routes, ownedLocomotives, cityDemand } = s;
+          let cash = s.cash;
+          const newDemand = {};
+          for (const [cityId, goods] of Object.entries(cityDemand)) {
+            newDemand[cityId] = { ...goods };
+          }
+
+          for (const route of routes.filter(r => r.status === 'running')) {
+            const owned = ownedLocomotives.find(o => o.uid === route.locomotiveUid);
+            const loco = LOCOMOTIVES.find(l => l.id === owned?.catalogId);
+            const maintenanceBase = loco?.maintenanceBase ?? 80;
+            const tons = maxStopTons(route.schedule, route.stops.length);
+            const maintenance = maintenanceBase + tons * TONS_RATE;
+
+            let revenue = 0;
+            for (let i = 0; i < route.stops.length; i++) {
+              const cityId = route.stops[i];
+              const consist = resolveConsist(route.schedule, i);
+              for (const carType of consist) {
+                const good = GOODS.find(g => g.id === carType);
+                if (!good) continue;
+                const demand = newDemand[cityId]?.[carType] ?? 0;
+                if (demand > 0) {
+                  revenue += Math.round(good.baseRate * (demand / 100));
+                  newDemand[cityId][carType] = Math.max(0, demand - DEMAND_DROP_PER_CAR);
+                }
+              }
+            }
+
+            cash += revenue - maintenance;
+          }
+
+          return { cash, cityDemand: newDemand };
         });
       },
     }),

@@ -255,3 +255,49 @@ describe('tickDemand', () => {
     expect(d['chi']['coal']).toBeUndefined();
   });
 });
+
+describe('settleAllRoutes', () => {
+  beforeEach(() => {
+    useGameStore.setState({ ...INITIAL_STATE });
+    hydrateCounters({ routes: [], ownedLocomotives: [] });
+    useGameStore.getState().buyLocomotive('americ');
+    const uid = useGameStore.getState().ownedLocomotives[0].uid;
+    // SF→SAC route. SF demands freight/coal/cattle. SAC demands passenger/mail.
+    useGameStore.getState().createRoute(['sf', 'sac'], uid);
+  });
+
+  it('earns revenue based on demand level and reduces demand', () => {
+    // Set known demand: SAC demands passenger at 80
+    useGameStore.setState({ cityDemand: { ...INITIAL_STATE.cityDemand, sac: { passenger: 80, mail: 60 } } });
+    const cashBefore = useGameStore.getState().cash;
+    useGameStore.getState().settleAllRoutes();
+    const s = useGameStore.getState();
+    // Should have earned something (demand was > 0)
+    expect(s.cash).toBeGreaterThan(cashBefore - 1000); // maintenance is ~$160/tick
+    // SAC passenger demand should have dropped
+    expect(s.cityDemand['sac']['passenger']).toBeLessThan(80);
+  });
+
+  it('earns zero revenue for cars whose city has zero demand', () => {
+    // Set all demands to 0
+    const zeroDemand = Object.fromEntries(
+      Object.entries(INITIAL_STATE.cityDemand).map(([cid, goods]) => [
+        cid,
+        Object.fromEntries(Object.entries(goods).map(([g]) => [g, 0])),
+      ])
+    );
+    useGameStore.setState({ cityDemand: zeroDemand });
+    const cashBefore = useGameStore.getState().cash;
+    useGameStore.getState().settleAllRoutes();
+    // Only maintenance deducted (American base $80 + 12t × $12 = $80 + $144 = $224)
+    expect(useGameStore.getState().cash).toBe(cashBefore - 224);
+  });
+
+  it('skips suspended routes', () => {
+    const id = useGameStore.getState().routes[0].id;
+    useGameStore.getState().suspendRoute(id);
+    const cashBefore = useGameStore.getState().cash;
+    useGameStore.getState().settleAllRoutes();
+    expect(useGameStore.getState().cash).toBe(cashBefore);
+  });
+});

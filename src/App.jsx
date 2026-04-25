@@ -11,19 +11,23 @@ import { NEWS } from './data/news.js';
 const COMPANY_STATIC = { name: 'GREAT NORTHERN & PACIFIC', founded: 1863 };
 
 export default function App() {
-  const cash        = useGameStore(s => s.cash);
-  const year        = useGameStore(s => s.year);
-  const month       = useGameStore(s => s.month);
-  const screen      = useGameStore(s => s.screen);
-  const navigate    = useGameStore(s => s.navigate);
-  const tickRevenue = useGameStore(s => s.tickRevenue);
+  const cash             = useGameStore(s => s.cash);
+  const year             = useGameStore(s => s.year);
+  const month            = useGameStore(s => s.month);
+  const screen           = useGameStore(s => s.screen);
+  const navigate         = useGameStore(s => s.navigate);
+  const settleAllRoutes  = useGameStore(s => s.settleAllRoutes);
+  const tickDemand       = useGameStore(s => s.tickDemand);
 
   const [hudVisible, setHudVisible] = useState(true);
 
   useEffect(() => {
-    const id = setInterval(tickRevenue, 2000);
+    const id = setInterval(() => {
+      settleAllRoutes();
+      tickDemand();
+    }, 2000);
     return () => clearInterval(id);
-  }, [tickRevenue]);
+  }, [settleAllRoutes, tickDemand]);
 
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
