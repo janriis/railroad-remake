@@ -161,7 +161,9 @@ export const useGameStore = create(
             stops,
             locomotiveUid,
             status: 'running',
-            revenuePerTick: stops.length * 800,
+            schedule: { 0: ['passenger', 'mail'] },
+            loadingPolicy: 'express',
+            maxWaitDays: 2,
           }],
           trains: [...s.trains, newTrain],
           ownedLocomotives: s.ownedLocomotives.map(l =>
@@ -174,6 +176,39 @@ export const useGameStore = create(
       suspendRoute: (routeId) => {
         set(s => ({
           routes: s.routes.map(r => r.id === routeId ? { ...r, status: 'suspended' } : r),
+        }));
+      },
+
+      resumeRoute: (routeId) => {
+        set(s => ({
+          routes: s.routes.map(r => r.id === routeId ? { ...r, status: 'running' } : r),
+        }));
+      },
+
+      setStopCars: (routeId, stopIndex, cars) => {
+        const { routes, ownedLocomotives } = get();
+        const route = routes.find(r => r.id === routeId);
+        if (!route) return false;
+        const owned = ownedLocomotives.find(o => o.uid === route.locomotiveUid);
+        const loco = LOCOMOTIVES.find(l => l.id === owned?.catalogId);
+        const maxTons = loco?.maxTons ?? 36;
+        const totalTons = cars.reduce((sum, t) => sum + (GOODS.find(g => g.id === t)?.weight ?? 0), 0);
+        if (totalTons > maxTons) return false;
+        set(s => ({
+          routes: s.routes.map(r =>
+            r.id === routeId
+              ? { ...r, schedule: { ...r.schedule, [stopIndex]: cars } }
+              : r
+          ),
+        }));
+        return true;
+      },
+
+      setLoadingPolicy: (routeId, policy, maxWaitDays = 2) => {
+        set(s => ({
+          routes: s.routes.map(r =>
+            r.id === routeId ? { ...r, loadingPolicy: policy, maxWaitDays } : r
+          ),
         }));
       },
 

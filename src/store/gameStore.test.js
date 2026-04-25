@@ -86,17 +86,21 @@ describe('buyLocomotive', () => {
 
 describe('createRoute', () => {
   beforeEach(() => {
-    reset();
+    useGameStore.setState({ ...INITIAL_STATE });
+    hydrateCounters({ routes: [], ownedLocomotives: [] });
     useGameStore.getState().buyLocomotive('americ');
   });
 
-  it('creates running route, adds train, marks loco assigned', () => {
+  it('creates running route with schedule, loadingPolicy, maxWaitDays (no revenuePerTick)', () => {
     const uid = useGameStore.getState().ownedLocomotives[0].uid;
     const routeId = useGameStore.getState().createRoute(['sf', 'sac', 'slc'], uid);
     const s = useGameStore.getState();
     expect(routeId).toBeTruthy();
     expect(s.routes[0].status).toBe('running');
-    expect(s.routes[0].revenuePerTick).toBe(3 * 800);
+    expect(s.routes[0].schedule[0]).toEqual(['passenger', 'mail']);
+    expect(s.routes[0].loadingPolicy).toBe('express');
+    expect(s.routes[0].maxWaitDays).toBe(2);
+    expect(s.routes[0].revenuePerTick).toBeUndefined();
     expect(s.trains.some(t => t.id === routeId)).toBe(true);
     expect(s.ownedLocomotives[0].assignedRouteId).toBe(routeId);
   });
@@ -113,21 +117,74 @@ describe('createRoute', () => {
   });
 });
 
-describe('tickRevenue', () => {
-  beforeEach(reset);
-
-  it('adds revenuePerTick for running routes', () => {
-    useGameStore.setState({ routes: [{ id: 'R-1', status: 'running', revenuePerTick: 2400 }] });
-    const before = useGameStore.getState().cash;
-    useGameStore.getState().tickRevenue();
-    expect(useGameStore.getState().cash).toBe(before + 2400);
+describe('suspendRoute + resumeRoute', () => {
+  beforeEach(() => {
+    useGameStore.setState({ ...INITIAL_STATE });
+    hydrateCounters({ routes: [], ownedLocomotives: [] });
+    useGameStore.getState().buyLocomotive('americ');
+    const uid = useGameStore.getState().ownedLocomotives[0].uid;
+    useGameStore.getState().createRoute(['sf', 'sac'], uid);
   });
 
-  it('skips suspended routes', () => {
-    useGameStore.setState({ routes: [{ id: 'R-1', status: 'suspended', revenuePerTick: 2400 }] });
-    const before = useGameStore.getState().cash;
-    useGameStore.getState().tickRevenue();
-    expect(useGameStore.getState().cash).toBe(before);
+  it('suspendRoute sets status to suspended', () => {
+    const id = useGameStore.getState().routes[0].id;
+    useGameStore.getState().suspendRoute(id);
+    expect(useGameStore.getState().routes[0].status).toBe('suspended');
+  });
+
+  it('resumeRoute sets status back to running', () => {
+    const id = useGameStore.getState().routes[0].id;
+    useGameStore.getState().suspendRoute(id);
+    useGameStore.getState().resumeRoute(id);
+    expect(useGameStore.getState().routes[0].status).toBe('running');
+  });
+});
+
+describe('setStopCars', () => {
+  beforeEach(() => {
+    useGameStore.setState({ ...INITIAL_STATE });
+    hydrateCounters({ routes: [], ownedLocomotives: [] });
+    useGameStore.getState().buyLocomotive('americ');
+    const uid = useGameStore.getState().ownedLocomotives[0].uid;
+    useGameStore.getState().createRoute(['sf', 'sac', 'slc'], uid);
+  });
+
+  it('sets car consist for a specific stop index', () => {
+    const id = useGameStore.getState().routes[0].id;
+    useGameStore.getState().setStopCars(id, 2, ['coal', 'freight']);
+    expect(useGameStore.getState().routes[0].schedule[2]).toEqual(['coal', 'freight']);
+  });
+
+  it('rejects consist that exceeds loco maxTons (American = 36t; coal+freight+coal = 46t)', () => {
+    const id = useGameStore.getState().routes[0].id;
+    // coal=16t, freight=14t, coal=16t → 46t > 36t
+    const ok = useGameStore.getState().setStopCars(id, 0, ['coal', 'freight', 'coal']);
+    expect(ok).toBe(false);
+    expect(useGameStore.getState().routes[0].schedule[0]).toEqual(['passenger', 'mail']);
+  });
+});
+
+describe('setLoadingPolicy', () => {
+  beforeEach(() => {
+    useGameStore.setState({ ...INITIAL_STATE });
+    hydrateCounters({ routes: [], ownedLocomotives: [] });
+    useGameStore.getState().buyLocomotive('americ');
+    const uid = useGameStore.getState().ownedLocomotives[0].uid;
+    useGameStore.getState().createRoute(['sf', 'sac'], uid);
+  });
+
+  it('updates loadingPolicy and maxWaitDays', () => {
+    const id = useGameStore.getState().routes[0].id;
+    useGameStore.getState().setLoadingPolicy(id, 'fullLoad', 4);
+    const r = useGameStore.getState().routes[0];
+    expect(r.loadingPolicy).toBe('fullLoad');
+    expect(r.maxWaitDays).toBe(4);
+  });
+
+  it('defaults maxWaitDays to 2 when not provided', () => {
+    const id = useGameStore.getState().routes[0].id;
+    useGameStore.getState().setLoadingPolicy(id, 'fullLoad');
+    expect(useGameStore.getState().routes[0].maxWaitDays).toBe(2);
   });
 });
 
