@@ -5,6 +5,7 @@ export const LOCOMOTIVES = [
     best: 'Short Haul', era: 'Pioneer',
     description: "The Baltimore & Ohio's famous vertical-boiler curiosity. An antique that turns heads at every depot — though her fireman earns his keep.",
     availability: 'Available',
+    maxTons: 24, maintenanceBase: 40,
   },
   {
     id: 'americ', name: '4-4-0 "American"', years: '1860–1880',
@@ -12,6 +13,7 @@ export const LOCOMOTIVES = [
     best: 'Passenger', era: 'Golden Age',
     description: 'The most common locomotive of the Civil War era. Versatile, reliable, and handsome in her livery.',
     availability: 'Available',
+    maxTons: 36, maintenanceBase: 80,
   },
   {
     id: 'mogul', name: '2-6-0 "Mogul"', years: '1866–1890',
@@ -19,6 +21,7 @@ export const LOCOMOTIVES = [
     best: 'Freight', era: 'Golden Age',
     description: 'A brute of a freight hauler. Six driving wheels give her tremendous pulling power over the plains.',
     availability: 'Available',
+    maxTons: 56, maintenanceBase: 120,
   },
   {
     id: 'tenwh', name: '4-6-0 "Ten-Wheeler"', years: '1868–1895',
@@ -26,6 +29,7 @@ export const LOCOMOTIVES = [
     best: 'Mixed', era: 'Golden Age',
     description: 'A compromise between speed and tractive force. Popular with express lines hauling long trains.',
     availability: 'Available',
+    maxTons: 64, maintenanceBase: 140,
   },
   {
     id: 'consol', name: '2-8-0 "Consolidation"', years: '1866–1900',
@@ -33,6 +37,7 @@ export const LOCOMOTIVES = [
     best: 'Coal & Ore', era: 'Industrial',
     description: 'Eight driving wheels of iron fury. She will drag a mountain over the Rockies if you ask her.',
     availability: 'Available',
+    maxTons: 80, maintenanceBase: 160,
   },
   {
     id: 'atlan', name: '4-4-2 "Atlantic"', years: '1888–1910',
@@ -40,5 +45,6 @@ export const LOCOMOTIVES = [
     best: 'Express Passenger', era: 'Modern',
     description: 'Latest from the Baldwin works. The fastest wheels in the west — and twice as expensive.',
     availability: 'Awaiting 1888',
+    maxTons: 44, maintenanceBase: 100,
   },
 ];
