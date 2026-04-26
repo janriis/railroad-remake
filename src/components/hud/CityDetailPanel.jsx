@@ -41,10 +41,10 @@ export function CityDetailPanel({ cityId, onClose, onLayTrack }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
         <CityVignette size={city.size} style={{ flexShrink: 0 }} />
         <div>
-          <div className="display uppercase" style={{ fontSize: 12, color: '#c49a44', letterSpacing: '0.14em' }}>
+          <div className="display uppercase" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--accent)', letterSpacing: '0.14em' }}>
             {city.size.toUpperCase()} · {city.state}
           </div>
-          <div className="body-serif" style={{ fontSize: 11, color: '#a88238', fontStyle: 'italic' }}>
+          <div className="body-serif" style={{ fontSize: 'var(--font-size-base)', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
             Pop. {city.pop}
           </div>
         </div>
@@ -80,21 +80,20 @@ export function CityDetailPanel({ cityId, onClose, onLayTrack }) {
       )}
 
       <DividerDots />
-
       <div style={{ marginBottom: 10 }}>
         <Label>Rail Connections</Label>
         <div style={{ marginTop: 4 }}>
           {connectedTracks.length === 0 ? (
-            <div className="body-serif" style={{ fontSize: 11, color: '#8b6a30', fontStyle: 'italic' }}>No rail connections</div>
+            <div className="body-serif" style={{ fontSize: 'var(--font-size-base)', color: 'var(--text-dim)', fontStyle: 'italic' }}>No rail connections</div>
           ) : (
             connectedTracks.map((t, i) => {
               const otherId = t.a === cityId ? t.b : t.a;
               const other   = cityById(otherId);
               return (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', borderBottom: '1px solid rgba(26,12,8,0.3)' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: t.owner === 'player' ? '#c49a44' : t.owner === 'rival' ? '#c85040' : '#8b8070', flexShrink: 0 }} />
-                  <span className="body-serif" style={{ fontSize: 11, color: '#d9c698' }}>{other?.name ?? otherId}</span>
-                  <span style={{ marginLeft: 'auto', fontSize: 9, color: '#8b6a30', fontFamily: 'IM Fell English SC, serif' }}>{t.owner}</span>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: t.owner === 'player' ? 'var(--accent)' : t.owner === 'rival' ? 'var(--red)' : 'var(--text-muted)', flexShrink: 0 }}/>
+                  <span className="body-serif" style={{ fontSize: 'var(--font-size-base)', color: 'var(--text-secondary)' }}>{other?.name ?? otherId}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 'var(--font-size-label)', color: 'var(--text-dim)', fontFamily: 'IM Fell English SC, serif' }}>{t.owner}</span>
                 </div>
               );
             })
@@ -102,7 +101,7 @@ export function CityDetailPanel({ cityId, onClose, onLayTrack }) {
         </div>
       </div>
 
-      <button className="btn-brass" onClick={onLayTrack} style={{ width: '100%', fontSize: 12 }}>
+      <button className="btn-brass" onClick={onLayTrack} style={{ width: '100%', fontSize: 'var(--font-size-sm)' }}>
         ⚒ Lay Track From Here
       </button>
     </Panel>

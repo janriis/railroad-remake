@@ -6,10 +6,10 @@ function LedgerRow({ label, value, delta }) {
   return (
     <div>
       <Label>{label}</Label>
-      <div className="numeric gold" style={{ fontSize: 15, color: '#f0d896' }}>
+      <div className="numeric gold" style={{ fontSize: 15 }}>
         {value}
         {delta != null && (
-          <span style={{ fontSize: 11, marginLeft: 4, color: delta >= 0 ? '#6bbf5a' : '#c85040' }}>
+          <span style={{ fontSize: 11, marginLeft: 4, color: delta >= 0 ? 'var(--green)' : 'var(--red)' }}>
             {delta >= 0 ? '▲' : '▼'}{Math.abs(delta).toFixed(2)}
           </span>
         )}
@@ -28,7 +28,7 @@ export function CompanyPanel() {
         <LedgerRow label="Net Worth" value={'$' + (netWorth/1e6).toFixed(2) + 'M'}/>
       </div>
       <div className="divider-dots" style={{ margin: '10px 0' }}/>
-      <div className="body-serif" style={{ fontSize: 12, fontStyle: 'italic', color: '#d9c698', textAlign: 'center' }}>
+      <div className="body-serif" style={{ fontSize: 'var(--font-size-base)', fontStyle: 'italic', color: 'var(--text-secondary)', textAlign: 'center' }}>
         "A railroad is a ribbon of steel binding the Republic."
       </div>
     </Panel>

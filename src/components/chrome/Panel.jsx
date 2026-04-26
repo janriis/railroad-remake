@@ -3,8 +3,8 @@ import { Filigree } from './Filigree.jsx';
 export function Panel({ title, children, style = {}, bodyStyle = {}, actions, noPadding }) {
   return (
     <div className="wood-grain" style={{
-      position: 'relative', border: '1px solid #1a0c08',
-      boxShadow: 'inset 0 1px 0 rgba(255,200,140,0.15), inset 0 0 0 2px #2a1510, 0 6px 20px rgba(0,0,0,0.6)',
+      position: 'relative', border: '1px solid var(--border-strong)',
+      boxShadow: 'inset 0 1px 0 rgba(255,200,140,0.15), inset 0 0 0 2px rgba(0,0,0,0.3), 0 6px 20px rgba(0,0,0,0.6)',
       display: 'flex', flexDirection: 'column', ...style,
     }}>
       {title && (
