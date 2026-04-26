@@ -126,12 +126,13 @@ export function DepotScreen({ onBack }) {
           </div>
 
           {/* Specs grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, padding: '12px 0', borderTop: '1px solid rgba(196,154,68,0.2)', borderBottom: '1px solid rgba(196,154,68,0.2)', marginBottom: 12 }}>
-            <Spec label="Price" value={'$' + loco.price.toLocaleString()} />
-            <Spec label="Max Speed" value={loco.maxSpeed + ' mph'} />
-            <Spec label="Power" value={loco.power} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, padding: '12px 0', borderTop: '1px solid rgba(196,154,68,0.2)', borderBottom: '1px solid rgba(196,154,68,0.2)', marginBottom: 12 }}>
+            <Spec label="Price"       value={'$' + loco.price.toLocaleString()} />
+            <Spec label="Max Speed"   value={loco.maxSpeed + ' mph'} />
+            <Spec label="Capacity"    value={loco.maxTons + ' t'} />
+            <Spec label="Power"       value={loco.power} />
             <Spec label="Reliability" value={loco.reliability} />
-            <Spec label="Best For" value={loco.best} />
+            <Spec label="Best For"    value={loco.best} />
           </div>
 
           {/* Description */}
