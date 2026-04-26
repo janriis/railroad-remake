@@ -4,12 +4,40 @@ import { CITIES, cityById } from '../data/cities';
 import { INITIAL_TRACKS } from '../data/tracks';
 import { INITIAL_TRAINS } from '../data/trains';
 import { LOCOMOTIVES } from '../data/locomotives';
+import { GOODS, DEMAND_RECOVERY_RATE, DEMAND_DROP_PER_CAR, TONS_RATE } from '../data/goods';
 
 const TRACK_COST_PER_PIXEL = 1990;
 const TRAIN_COLORS = ['#c49a44', '#8b2818', '#3d5c2a', '#1e3a5c', '#6b4a88', '#2a6b5c'];
 
 let _routeCounter = 1;
 let _locoCounter = 1;
+
+function buildInitialCityDemand() {
+  const result = {};
+  for (const city of CITIES) {
+    if (!city.demands?.length) continue;
+    result[city.id] = {};
+    for (const good of city.demands) result[city.id][good] = 50;
+  }
+  return result;
+}
+
+function resolveConsist(schedule, stopIndex) {
+  for (let i = stopIndex; i >= 0; i--) {
+    if (schedule[i] !== undefined) return schedule[i];
+  }
+  return ['passenger', 'mail'];
+}
+
+function maxStopTons(schedule, stopCount) {
+  let max = 0;
+  for (let i = 0; i < stopCount; i++) {
+    const consist = resolveConsist(schedule, i);
+    const tons = consist.reduce((s, t) => s + (GOODS.find(g => g.id === t)?.weight ?? 0), 0);
+    if (tons > max) max = tons;
+  }
+  return max;
+}
 
 export function hydrateCounters(state) {
   if (!state) return;
@@ -38,7 +66,8 @@ export const INITIAL_STATE = {
   selectedCityId: null,
   focusTrainId: null,
   trackLayingFrom: null,
-  version: 1,
+  cityDemand: buildInitialCityDemand(),
+  version: 2,
 };
 
 export const useGameStore = create(
@@ -51,6 +80,19 @@ export const useGameStore = create(
       selectTrain: (id) => set({ focusTrainId: id, selectedCityId: null }),
       startTrackLaying: (fromId) => set({ trackLayingFrom: fromId, selectedCityId: null }),
       cancelTrackLaying: () => set({ trackLayingFrom: null }),
+
+      tickDemand: () => {
+        set(s => {
+          const next = {};
+          for (const [cityId, goods] of Object.entries(s.cityDemand)) {
+            next[cityId] = {};
+            for (const [good, val] of Object.entries(goods)) {
+              next[cityId][good] = Math.min(100, val + DEMAND_RECOVERY_RATE);
+            }
+          }
+          return { cityDemand: next };
+        });
+      },
 
       trackCost: (fromId, toId) => {
         const a = cityById(fromId);
@@ -129,7 +171,9 @@ export const useGameStore = create(
             stops,
             locomotiveUid,
             status: 'running',
-            revenuePerTick: stops.length * 800,
+            schedule: { 0: ['passenger', 'mail'] },
+            loadingPolicy: 'express',
+            maxWaitDays: 2,
           }],
           trains: [...s.trains, newTrain],
           ownedLocomotives: s.ownedLocomotives.map(l =>
@@ -145,55 +189,81 @@ export const useGameStore = create(
         }));
       },
 
-      tickRevenue: () => {
+      resumeRoute: (routeId) => {
+        set(s => ({
+          routes: s.routes.map(r => r.id === routeId ? { ...r, status: 'running' } : r),
+        }));
+      },
+
+      setStopCars: (routeId, stopIndex, cars) => {
+        const { routes, ownedLocomotives } = get();
+        const route = routes.find(r => r.id === routeId);
+        if (!route) return false;
+        const owned = ownedLocomotives.find(o => o.uid === route.locomotiveUid);
+        const loco = LOCOMOTIVES.find(l => l.id === owned?.catalogId);
+        const maxTons = loco?.maxTons ?? 36;
+        const totalTons = cars.reduce((sum, t) => sum + (GOODS.find(g => g.id === t)?.weight ?? 0), 0);
+        if (totalTons > maxTons) return false;
+        set(s => ({
+          routes: s.routes.map(r =>
+            r.id === routeId
+              ? { ...r, schedule: { ...r.schedule, [stopIndex]: cars } }
+              : r
+          ),
+        }));
+        return true;
+      },
+
+      setLoadingPolicy: (routeId, policy, maxWaitDays = 2) => {
+        set(s => ({
+          routes: s.routes.map(r =>
+            r.id === routeId ? { ...r, loadingPolicy: policy, maxWaitDays } : r
+          ),
+        }));
+      },
+
+      settleAllRoutes: () => {
         set(s => {
-          const earned = s.routes
-            .filter(r => r.status === 'running')
-            .reduce((acc, r) => acc + r.revenuePerTick, 0);
-          return earned > 0 ? { cash: s.cash + earned } : s;
+          const { routes, ownedLocomotives, cityDemand } = s;
+          let cash = s.cash;
+          const newDemand = {};
+          for (const [cityId, goods] of Object.entries(cityDemand)) {
+            newDemand[cityId] = { ...goods };
+          }
+
+          for (const route of routes.filter(r => r.status === 'running')) {
+            const owned = ownedLocomotives.find(o => o.uid === route.locomotiveUid);
+            const loco = LOCOMOTIVES.find(l => l.id === owned?.catalogId);
+            const maintenanceBase = loco?.maintenanceBase ?? 80;
+            const tons = maxStopTons(route.schedule, route.stops.length);
+            const maintenance = maintenanceBase + tons * TONS_RATE;
+
+            let revenue = 0;
+            for (let i = 0; i < route.stops.length; i++) {
+              const cityId = route.stops[i];
+              const consist = resolveConsist(route.schedule, i);
+              for (const carType of consist) {
+                const good = GOODS.find(g => g.id === carType);
+                if (!good) continue;
+                const demand = newDemand[cityId]?.[carType] ?? 0;
+                if (demand > 0) {
+                  revenue += Math.round(good.baseRate * (demand / 100));
+                  newDemand[cityId][carType] = Math.max(0, demand - DEMAND_DROP_PER_CAR);
+                }
+              }
+            }
+
+            cash += revenue - maintenance;
+          }
+
+          return { cash, cityDemand: newDemand };
         });
       },
     }),
     {
       name: 'iron-empire-save',
-      version: 1,
-      migrate: (persistedState, version) => {
-        if (version === 0) {
-          const routes = persistedState.routes ?? [];
-          const ownedLocomotives = persistedState.ownedLocomotives ?? [];
-
-          // Re-derive trains from persisted routes, mirroring createRoute logic
-          const trains = routes.map(route => {
-            const loco = ownedLocomotives.find(l => l.uid === route.locomotiveUid);
-            return {
-              id: route.id,
-              name: loco?.name ?? 'Unknown',
-              model: LOCOMOTIVES.find(l => l.id === loco?.catalogId)?.name ?? loco?.name ?? 'Unknown',
-              route: route.stops,
-              leg: 0,
-              progress: 0,
-              speed: 0.00042,
-              cars: ['passenger', 'mail'],
-              color: loco?.color ?? '#c49a44',
-            };
-          });
-
-          return {
-            ...INITIAL_STATE,
-            cash: persistedState.cash ?? INITIAL_STATE.cash,
-            netWorth: persistedState.netWorth ?? INITIAL_STATE.netWorth,
-            year: persistedState.year ?? INITIAL_STATE.year,
-            month: persistedState.month ?? INITIAL_STATE.month,
-            tracks: persistedState.tracks ?? INITIAL_STATE.tracks,
-            ownedLocomotives,
-            routes,
-            trains,
-            version: 1,
-          };
-        }
-        // Unknown future version — wipe as last resort
-        return { ...INITIAL_STATE };
-      },
+      version: 2,
+      migrate: (_persistedState, _version) => ({ ...INITIAL_STATE }),
       onRehydrateStorage: () => (state) => hydrateCounters(state),
     }
   )

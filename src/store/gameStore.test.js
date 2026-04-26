@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useGameStore, INITIAL_STATE, hydrateCounters } from './gameStore';
 import { INITIAL_TRACKS } from '../data/tracks';
 import { INITIAL_TRAINS } from '../data/trains';
+import { CITIES } from '../data/cities';
 
 function reset() {
   useGameStore.setState({
@@ -85,17 +86,21 @@ describe('buyLocomotive', () => {
 
 describe('createRoute', () => {
   beforeEach(() => {
-    reset();
+    useGameStore.setState({ ...INITIAL_STATE });
+    hydrateCounters({ routes: [], ownedLocomotives: [] });
     useGameStore.getState().buyLocomotive('americ');
   });
 
-  it('creates running route, adds train, marks loco assigned', () => {
+  it('creates running route with schedule, loadingPolicy, maxWaitDays (no revenuePerTick)', () => {
     const uid = useGameStore.getState().ownedLocomotives[0].uid;
     const routeId = useGameStore.getState().createRoute(['sf', 'sac', 'slc'], uid);
     const s = useGameStore.getState();
     expect(routeId).toBeTruthy();
     expect(s.routes[0].status).toBe('running');
-    expect(s.routes[0].revenuePerTick).toBe(3 * 800);
+    expect(s.routes[0].schedule[0]).toEqual(['passenger', 'mail']);
+    expect(s.routes[0].loadingPolicy).toBe('express');
+    expect(s.routes[0].maxWaitDays).toBe(2);
+    expect(s.routes[0].revenuePerTick).toBeUndefined();
     expect(s.trains.some(t => t.id === routeId)).toBe(true);
     expect(s.ownedLocomotives[0].assignedRouteId).toBe(routeId);
   });
@@ -112,21 +117,74 @@ describe('createRoute', () => {
   });
 });
 
-describe('tickRevenue', () => {
-  beforeEach(reset);
-
-  it('adds revenuePerTick for running routes', () => {
-    useGameStore.setState({ routes: [{ id: 'R-1', status: 'running', revenuePerTick: 2400 }] });
-    const before = useGameStore.getState().cash;
-    useGameStore.getState().tickRevenue();
-    expect(useGameStore.getState().cash).toBe(before + 2400);
+describe('suspendRoute + resumeRoute', () => {
+  beforeEach(() => {
+    useGameStore.setState({ ...INITIAL_STATE });
+    hydrateCounters({ routes: [], ownedLocomotives: [] });
+    useGameStore.getState().buyLocomotive('americ');
+    const uid = useGameStore.getState().ownedLocomotives[0].uid;
+    useGameStore.getState().createRoute(['sf', 'sac'], uid);
   });
 
-  it('skips suspended routes', () => {
-    useGameStore.setState({ routes: [{ id: 'R-1', status: 'suspended', revenuePerTick: 2400 }] });
-    const before = useGameStore.getState().cash;
-    useGameStore.getState().tickRevenue();
-    expect(useGameStore.getState().cash).toBe(before);
+  it('suspendRoute sets status to suspended', () => {
+    const id = useGameStore.getState().routes[0].id;
+    useGameStore.getState().suspendRoute(id);
+    expect(useGameStore.getState().routes[0].status).toBe('suspended');
+  });
+
+  it('resumeRoute sets status back to running', () => {
+    const id = useGameStore.getState().routes[0].id;
+    useGameStore.getState().suspendRoute(id);
+    useGameStore.getState().resumeRoute(id);
+    expect(useGameStore.getState().routes[0].status).toBe('running');
+  });
+});
+
+describe('setStopCars', () => {
+  beforeEach(() => {
+    useGameStore.setState({ ...INITIAL_STATE });
+    hydrateCounters({ routes: [], ownedLocomotives: [] });
+    useGameStore.getState().buyLocomotive('americ');
+    const uid = useGameStore.getState().ownedLocomotives[0].uid;
+    useGameStore.getState().createRoute(['sf', 'sac', 'slc'], uid);
+  });
+
+  it('sets car consist for a specific stop index', () => {
+    const id = useGameStore.getState().routes[0].id;
+    useGameStore.getState().setStopCars(id, 2, ['coal', 'freight']);
+    expect(useGameStore.getState().routes[0].schedule[2]).toEqual(['coal', 'freight']);
+  });
+
+  it('rejects consist that exceeds loco maxTons (American = 36t; coal+freight+coal = 46t)', () => {
+    const id = useGameStore.getState().routes[0].id;
+    // coal=16t, freight=14t, coal=16t → 46t > 36t
+    const ok = useGameStore.getState().setStopCars(id, 0, ['coal', 'freight', 'coal']);
+    expect(ok).toBe(false);
+    expect(useGameStore.getState().routes[0].schedule[0]).toEqual(['passenger', 'mail']);
+  });
+});
+
+describe('setLoadingPolicy', () => {
+  beforeEach(() => {
+    useGameStore.setState({ ...INITIAL_STATE });
+    hydrateCounters({ routes: [], ownedLocomotives: [] });
+    useGameStore.getState().buyLocomotive('americ');
+    const uid = useGameStore.getState().ownedLocomotives[0].uid;
+    useGameStore.getState().createRoute(['sf', 'sac'], uid);
+  });
+
+  it('updates loadingPolicy and maxWaitDays', () => {
+    const id = useGameStore.getState().routes[0].id;
+    useGameStore.getState().setLoadingPolicy(id, 'fullLoad', 4);
+    const r = useGameStore.getState().routes[0];
+    expect(r.loadingPolicy).toBe('fullLoad');
+    expect(r.maxWaitDays).toBe(4);
+  });
+
+  it('defaults maxWaitDays to 2 when not provided', () => {
+    const id = useGameStore.getState().routes[0].id;
+    useGameStore.getState().setLoadingPolicy(id, 'fullLoad');
+    expect(useGameStore.getState().routes[0].maxWaitDays).toBe(2);
   });
 });
 
@@ -159,5 +217,87 @@ describe('hydrateCounters', () => {
   it('handles null/undefined state gracefully', () => {
     expect(() => hydrateCounters(null)).not.toThrow();
     expect(() => hydrateCounters(undefined)).not.toThrow();
+  });
+});
+
+describe('tickDemand', () => {
+  beforeEach(() => {
+    useGameStore.setState({ ...INITIAL_STATE });
+    hydrateCounters({ routes: [], ownedLocomotives: [] });
+  });
+
+  it('increases demand by DEMAND_RECOVERY_RATE for every demanded good at every city', () => {
+    const before = useGameStore.getState().cityDemand;
+    useGameStore.getState().tickDemand();
+    const after = useGameStore.getState().cityDemand;
+    // San Francisco demands freight — verify it rose
+    expect(after['sf']['freight']).toBe(before['sf']['freight'] + 3);
+  });
+
+  it('caps demand at 100', () => {
+    useGameStore.setState({
+      cityDemand: { sf: { freight: 99, coal: 100, cattle: 98 } },
+    });
+    useGameStore.getState().tickDemand();
+    const d = useGameStore.getState().cityDemand;
+    expect(d['sf']['freight']).toBe(100);
+    expect(d['sf']['coal']).toBe(100);
+    expect(d['sf']['cattle']).toBe(100);
+  });
+
+  it('initial cityDemand starts all demanded goods at 50', () => {
+    const d = useGameStore.getState().cityDemand;
+    // Chicago demands passenger, mail, cattle
+    expect(d['chi']['passenger']).toBe(50);
+    expect(d['chi']['mail']).toBe(50);
+    expect(d['chi']['cattle']).toBe(50);
+    // Chicago does not demand coal — should have no key
+    expect(d['chi']['coal']).toBeUndefined();
+  });
+});
+
+describe('settleAllRoutes', () => {
+  beforeEach(() => {
+    useGameStore.setState({ ...INITIAL_STATE });
+    hydrateCounters({ routes: [], ownedLocomotives: [] });
+    useGameStore.getState().buyLocomotive('americ');
+    const uid = useGameStore.getState().ownedLocomotives[0].uid;
+    // SF→SAC route. SF demands freight/coal/cattle. SAC demands passenger/mail.
+    useGameStore.getState().createRoute(['sf', 'sac'], uid);
+  });
+
+  it('earns revenue based on demand level and reduces demand', () => {
+    // Set known demand: SAC demands passenger at 80
+    useGameStore.setState({ cityDemand: { ...INITIAL_STATE.cityDemand, sac: { passenger: 80, mail: 60 } } });
+    const cashBefore = useGameStore.getState().cash;
+    useGameStore.getState().settleAllRoutes();
+    const s = useGameStore.getState();
+    // Should have earned something (demand was > 0)
+    expect(s.cash).toBeGreaterThan(cashBefore - 1000); // maintenance is ~$160/tick
+    // SAC passenger demand should have dropped
+    expect(s.cityDemand['sac']['passenger']).toBeLessThan(80);
+  });
+
+  it('earns zero revenue for cars whose city has zero demand', () => {
+    // Set all demands to 0
+    const zeroDemand = Object.fromEntries(
+      Object.entries(INITIAL_STATE.cityDemand).map(([cid, goods]) => [
+        cid,
+        Object.fromEntries(Object.entries(goods).map(([g]) => [g, 0])),
+      ])
+    );
+    useGameStore.setState({ cityDemand: zeroDemand });
+    const cashBefore = useGameStore.getState().cash;
+    useGameStore.getState().settleAllRoutes();
+    // Only maintenance deducted (American base $80 + 12t × $12 = $80 + $144 = $224)
+    expect(useGameStore.getState().cash).toBe(cashBefore - 224);
+  });
+
+  it('skips suspended routes', () => {
+    const id = useGameStore.getState().routes[0].id;
+    useGameStore.getState().suspendRoute(id);
+    const cashBefore = useGameStore.getState().cash;
+    useGameStore.getState().settleAllRoutes();
+    expect(useGameStore.getState().cash).toBe(cashBefore);
   });
 });
