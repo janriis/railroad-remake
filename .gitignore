@@ -17,3 +17,6 @@ dist/
 # Editor directories and files
 .DS_Store
 *.local
+
+# Hide superpowers docs
+docs/superpowers/
