@@ -1,4 +1,4 @@
-import { CARGO, FREIGHT_CAR_CAPACITY, MAX_CARS, PASSENGER_CAR_CAPACITY } from '../sim/config';
+import { CARGO, FREIGHT_CAR_CAPACITY, LOCO, PASSENGER_CAR_CAPACITY, TICKS_PER_DAY } from '../sim/config';
 import type { CarCounts, Train } from '../sim/trains';
 import type { Station } from '../sim/game';
 import type { Coord } from '../sim/types';
@@ -37,7 +37,11 @@ export function humanError(err: string): string {
     'track would cross': 'Diagonal tracks cannot cross between tiles. Cross at a tile instead.',
     'station must be on track': 'A station has to sit on track. Tap a tile with track.',
     'train must start at a station': 'Trains start at a station. Tap a station.',
-    'too many cars': `A train can pull at most ${MAX_CARS} cars.`,
+    'too many cars': 'This locomotive cannot pull that many cars.',
+    'model not on sale': 'That locomotive is no longer on sale.',
+    'model no longer on sale':
+      'That locomotive is no longer on sale, so it cannot be overhauled. Replace it instead.',
+    'train must be at a station': 'The train has to be standing at a station.',
     'cars need a locomotive': 'Cars need a locomotive.',
     'route needs at least two stops': 'Pick at least two stations.',
     'consecutive stops must differ': 'Two stops in a row cannot be the same station.',
@@ -90,7 +94,20 @@ export const trainColour = (ui: Ui, t: Train): string =>
   TRAIN_COLOURS[ui.game.trains.indexOf(t) % TRAIN_COLOURS.length]!;
 
 // ---------- train text ----------
+export const brokenDaysLeft = (ui: Ui, t: Train): number =>
+  t.brokenUntil === null ? 0 : Math.max(1, Math.ceil((t.brokenUntil - ui.game.time) / TICKS_PER_DAY));
+
+export const modelName = (t: Train): string => LOCO[t.model].name;
+
+/** "12 years, 8 left" while in working life, "Worn out" after it. */
+export function ageText(ui: Ui, t: Train): string {
+  const age = ui.game.trainAge(t);
+  if (ui.game.isWornOut(t)) return `${plural(age, 'year')}, worn out`;
+  return `${plural(age, 'year')}, ${ui.game.workingLifeLeft(t)} left`;
+}
+
 export function statusText(ui: Ui, t: Train): string {
+  if (ui.game.isBrokenDown(t)) return `Broken down, ${plural(brokenDaysLeft(ui, t), 'day')} left`;
   if (t.deadlocked) return 'Stuck head-on';
   if (t.status === 'waiting')
     return t.blockedBy === null ? 'Waiting: no way through to the next stop' : 'Waiting for the line ahead';

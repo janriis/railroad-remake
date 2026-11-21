@@ -7,6 +7,7 @@ import { renderCarsSheet } from './cars';
 import { renderIndustryInfo, renderStationInfo } from './info';
 import { renderLedger } from './ledger';
 import { renderPicking, renderRouteEditor } from './route';
+import { renderReplaceSheet, renderRetireSheet } from './replace';
 import { renderSendSheet } from './send';
 import { renderTrainSheet } from './train';
 
@@ -19,6 +20,14 @@ export function renderSheet(ui: Ui): void {
   }
   if (ui.carsEdit) {
     renderCarsSheet(ui);
+    return;
+  }
+  if (ui.retiring !== null) {
+    renderRetireSheet(ui);
+    return;
+  }
+  if (ui.replacing) {
+    renderReplaceSheet(ui);
     return;
   }
   if (ui.sendTo) {

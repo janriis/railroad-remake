@@ -1,8 +1,9 @@
 import type { Ui } from '../state';
 import { type Train } from '../../sim/trains';
 import { humanError, money, plural, trainName } from '../format';
-import { CAR_RESALE_RATE, FREIGHT_CAR_COST, MAX_CARS, PASSENGER_CAR_COST } from '../../sim/config';
+import { CAR_RESALE_RATE, FREIGHT_CAR_COST, LOCO, PASSENGER_CAR_COST } from '../../sim/config';
 import { btn } from '../dom';
+import { maxCarsOf } from '../models';
 
 export function beginCars(ui: Ui, train: Train): void {
   ui.clearSelection();
@@ -28,6 +29,7 @@ export function renderCarsSheet(ui: Ui): void {
   else if (added && removed)
     line = `Adds ${plural(added, 'car')}, takes off ${plural(removed, 'car')}: ${cost >= 0 ? money(cost) : `+${money(-cost)} back`}`;
   const total = c.passengerCars + c.freightCars;
+  const max = maxCarsOf(train.model);
   const broke = cost > ui.game.cash;
   const dropsOrders =
     total !== train.passengerCars + train.freightCars && train.stopOrders.some((o) => o !== null);
@@ -35,16 +37,16 @@ export function renderCarsSheet(ui: Ui): void {
     `<div class="stepper"><span>${label}</span><span class="ctl">
         <button type="button" data-act="${key}-" aria-label="Fewer ${label}"${n === 0 ? ' disabled' : ''}>−</button>
         <output>${n}</output>
-        <button type="button" data-act="${key}+" aria-label="More ${label}"${total >= MAX_CARS ? ' disabled' : ''}>+</button></span></div>`;
+        <button type="button" data-act="${key}+" aria-label="More ${label}"${total >= max ? ' disabled' : ''}>+</button></span></div>`;
   const bump = (key: 'passengerCars' | 'freightCars', d: number) => () => {
     const next = c[key] + d;
-    if (next < 0 || (d > 0 && c.passengerCars + c.freightCars >= MAX_CARS)) return;
+    if (next < 0 || (d > 0 && c.passengerCars + c.freightCars >= max)) return;
     c[key] = next;
     ui.renderSheet();
   };
   ui.setSheet(
     `<div class="sheet-title">Cars for ${trainName(ui, train)}</div>` +
-      `<div class="sub">One locomotive, up to ${MAX_CARS} cars.</div>` +
+      `<div class="sub">${LOCO[train.model].name}: up to ${max} cars.</div>` +
       row('Passenger cars', 'pass', c.passengerCars) +
       row('Freight cars', 'freight', c.freightCars) +
       `<div class="big" id="cars-price">${line}</div>` +

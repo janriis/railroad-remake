@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { LOCO, LOCO_MODELS, OVERHAUL_RATE, PASSENGER_CAR_COST, type LocoModel } from '../src/sim/config';
 import {
   act,
+  atYear,
   boot,
   cashOf,
   dragHandle,
@@ -230,4 +232,55 @@ test('hook: tileToClient lands inside the viewport for the fixture row', async (
     expect(p.y).toBeGreaterThan(100);
     expect(p.y).toBeLessThan(vp.height - 200);
   }
+});
+
+test('9. Locomotives: buy a chosen model, read model and age, overhaul at a station', async ({
+  page,
+}, info) => {
+  // 1872, with a fixture train bought in year 0, so it is 22 years old. Models come from the sim config.
+  const year = 1872;
+  const onSale = LOCO_MODELS.filter((m) => LOCO[m].from <= year && (LOCO[m].to ?? Infinity) >= year);
+  const pick = onSale[onSale.length - 1]!;
+  const errors = await boot(
+    page,
+    atYear(fixtureSave({ track: true, stations: [-6, 6], trains: [{ at: -6 }] }), year),
+  );
+  const oldModel = (await savedGame(page)).trains[0]!.model as LocoModel;
+  await tool(page, 'train').click();
+  await tapTile(page, info, at(6));
+  const sheet = page.locator('#sheet-msg');
+  await expect(sheet).toContainText('Buy a train');
+  await expect(sheet.locator('.model-card')).toHaveCount(onSale.length);
+  await act(page, `model:${pick}`).click();
+  await expect(act(page, `model:${pick}`)).toHaveAttribute('aria-pressed', 'true');
+  const price = LOCO[pick].price + 2 * PASSENGER_CAR_COST;
+  await expect(sheet.locator('.big')).toContainText(price.toLocaleString('en-US'));
+  const before = await cashOf(page);
+  await act(page, 'buy').click();
+  await expect(sheet).toContainText('Add stops');
+  expect(await cashOf(page)).toBe(before - price);
+  expect((await savedGame(page)).trains.map((t) => t.model)).toEqual([oldModel, pick]);
+  // Leave the route editor, then open the old locomotive's train from the roster.
+  await tool(page, 'pan').click();
+  await trainRow(page, 0).locator('.train-row').click();
+  await expect(sheet).toContainText(LOCO[oldModel].name);
+  await expect(sheet).toContainText('22 years');
+  const cash = await cashOf(page);
+  if (LOCO[oldModel].from <= year && (LOCO[oldModel].to ?? Infinity) >= year) {
+    await act(page, 'overhaul').click();
+    await expect(page.locator('#toast')).toContainText('overhauled');
+    expect(await cashOf(page)).toBe(cash - Math.round(LOCO[oldModel].price * OVERHAUL_RATE));
+    await expect(sheet).toContainText(`0 years, ${LOCO[oldModel].life} left`);
+  } else {
+    await expect(act(page, 'overhaul')).toBeDisabled();
+  }
+  // Retire it: confirm first, then it is gone and cash comes back.
+  const cash2 = await cashOf(page);
+  await act(page, 'retire').click();
+  await expect(sheet).toContainText('Retire Train 1?');
+  await act(page, 'retire').click();
+  await expect(page.locator('#toast')).toContainText('retired');
+  await expect(page.locator('#roster-title')).toHaveText('Trains (1)');
+  expect(await cashOf(page)).toBeGreaterThan(cash2);
+  expect(errors).toEqual([]);
 });

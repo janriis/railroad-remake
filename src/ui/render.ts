@@ -1,4 +1,4 @@
-import { TOWN_RADIUS, type IndustryKind } from '../sim/config';
+import { TOWN_RADIUS, type IndustryKind, type LocoModel } from '../sim/config';
 import type { Station } from '../sim/game';
 import type { GameMap } from '../sim/map';
 import { stepUnits } from '../sim/pathfinding';
@@ -486,6 +486,8 @@ export interface Pose {
   /** Direction of travel in radians. */
   a: number;
   kind: 'loco' | 'passenger' | 'freight';
+  /** Locomotive model (loco poses only), which picks the sprite. */
+  model?: LocoModel;
 }
 
 const CAR_GAP = 0.44;
@@ -554,7 +556,7 @@ export function trainPoses(t: Train, extra = 0): Pose[] {
     const a = Math.hypot(ax, ay) < 1e-6 ? Math.atan2(dir.y, dir.x) : Math.atan2(ay, ax);
     return { x: p.x, y: p.y, a, kind };
   };
-  const out: Pose[] = [{ ...poseAt(0.1, 'loco'), x: head.x, y: head.y }];
+  const out: Pose[] = [{ ...poseAt(0.1, 'loco'), x: head.x, y: head.y, model: t.model }];
   let d = 0.52;
   for (let i = 0; i < t.passengerCars; i++, d += CAR_GAP) out.push(poseAt(d, 'passenger'));
   for (let i = 0; i < t.freightCars; i++, d += CAR_GAP) out.push(poseAt(d, 'freight'));
@@ -716,12 +718,22 @@ export function drawStation(ctx: CanvasRenderingContext2D, st: Station): void {
   sprite(ctx, `station-${st.size}`, x + 0.5, y + 1.02, STATION_WIDTH[st.size] ?? 1.0);
 }
 
+/** The atlas frame for a locomotive model: `loco-<model>`, or the generic `loco` when there is none. */
+const locoFrame = (model: LocoModel): string => (frame(`loco-${model}`) ? `loco-${model}` : 'loco');
+
 const VEHICLE_LENGTH = { loco: 0.68, passenger: 0.46, freight: 0.46 } as const;
 
 /** Draws one vehicle at its pose (tile units); a coloured stripe along its side shows the train colour. */
 export function drawVehicle(ctx: CanvasRenderingContext2D, p: Pose, colour: string): void {
   const img = atlasImage();
-  const name = p.kind === 'loco' ? 'loco' : p.kind === 'passenger' ? 'car-passenger' : 'car-freight';
+  const name =
+    p.kind === 'loco'
+      ? p.model
+        ? locoFrame(p.model)
+        : 'loco'
+      : p.kind === 'passenger'
+        ? 'car-passenger'
+        : 'car-freight';
   const f = img ? frame(name) : undefined;
   if (!img || !f) return drawVehicleProcedural(ctx, p, colour);
   const len = VEHICLE_LENGTH[p.kind];

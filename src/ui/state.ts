@@ -4,6 +4,7 @@ import type { TrackPlan } from '../sim/planner';
 import type { Segment } from '../sim/track';
 import type { CarCounts, Train } from '../sim/trains';
 import type { Coord } from '../sim/types';
+import type { LocoModel } from '../sim/config';
 import { MONTHS, SAVE_KEY } from './constants';
 import { $ } from './dom';
 import { money } from './format';
@@ -31,6 +32,7 @@ export interface TrackState {
 
 export interface BuyState {
   at: Coord;
+  model: LocoModel;
   passengerCars: number;
   freightCars: number;
 }
@@ -45,6 +47,14 @@ export interface RouteState {
   /** List editor: index the station picker will insert at (stops.length = append), or null when closed. */
   picker: number | null;
   error: string | null;
+}
+
+/** Picking a new locomotive for a train standing at a station. */
+export interface ReplaceState {
+  trainId: number;
+  model: LocoModel | null;
+  /** True once the player must confirm selling cars. */
+  confirm: boolean;
 }
 
 export interface SendState {
@@ -129,6 +139,13 @@ export class Ui {
   dragStop: number | null = null;
   drag: DragState | null = null;
   carsEdit: CarsState | null = null;
+  replacing: ReplaceState | null = null;
+  /** Train id awaiting a confirmation to retire it. */
+  retiring: number | null = null;
+  /** Trains seen broken down (to toast once per breakdown); null until the first frame. */
+  brokenSeen: Set<number> | null = null;
+  /** Last year checked for model arrivals and retirements; null until the first frame. */
+  eraYear: number | null = null;
   selTrainId: number | null = null;
   selStation: Station | null = null;
   /** Station sheet pane: the overview, the build list, or a demolish confirmation for one building. */
@@ -229,6 +246,8 @@ export class Ui {
     this.buy = null;
     this.routing = null;
     this.carsEdit = null;
+    this.replacing = null;
+    this.retiring = null;
     this.selTrainId = null;
     this.selStation = null;
     this.stationPane = 'info';

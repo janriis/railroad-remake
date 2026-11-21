@@ -1,6 +1,8 @@
 import type { Ui } from './state';
 import { type Train } from '../sim/trains';
-import { loadText, money, statusText } from './format';
+import { ageText, brokenDaysLeft, loadText, money, statusText, trainName } from './format';
+import { LOCO, LOCO_MODELS } from '../sim/config';
+import { atStation } from './models';
 import { TICKS_PER_DAY } from '../sim/config';
 import { stepCamAnim } from './camera';
 import { ROSTER_MS, TICK_MS } from './constants';
@@ -25,9 +27,35 @@ export function trackIncome(ui: Ui): void {
   ui.lastIncome = income;
   ui.lastIncomeYear = year;
 }
+/** Toasts once per breakdown, and when a model arrives or retires at the turn of a year. */
+export function trackWear(ui: Ui): void {
+  const broken = new Set(ui.game.trains.filter((t) => ui.game.isBrokenDown(t)).map((t) => t.id));
+  if (ui.brokenSeen) {
+    const fresh = ui.game.trains.filter((t) => broken.has(t.id) && !ui.brokenSeen!.has(t.id));
+    if (fresh.length)
+      ui.showToast(
+        `${fresh.map((t) => trainName(ui, t)).join(', ')} broke down. It stands still for ${brokenDaysLeft(ui, fresh[0]!)} days.`,
+        5000,
+      );
+  }
+  ui.brokenSeen = broken;
+  const year = ui.game.date.year;
+  if (ui.eraYear !== null && year !== ui.eraYear) {
+    const news: string[] = [];
+    for (const m of LOCO_MODELS) {
+      if (ui.game.onSale(m, year) && !ui.game.onSale(m, ui.eraYear))
+        news.push(`New locomotive: ${LOCO[m].name}`);
+      else if (!ui.game.onSale(m, year) && ui.game.onSale(m, ui.eraYear))
+        news.push(`${LOCO[m].name} is no longer on sale`);
+    }
+    if (news.length) ui.showToast(news.join('. '), 6000);
+  }
+  ui.eraYear = year;
+}
 export function afterTicks(ui: Ui): void {
   ui.updateHud();
   trackIncome(ui);
+  trackWear(ui);
   const day = Math.floor(ui.game.time / TICKS_PER_DAY);
   if (day !== ui.lastDay) {
     ui.lastDay = day;
@@ -36,6 +64,8 @@ export function afterTicks(ui: Ui): void {
       (ui.selStation || ui.selIndustry || ui.ledgerOpen) &&
       !ui.routing &&
       !ui.carsEdit &&
+      !ui.replacing &&
+      ui.retiring === null &&
       !ui.sendTo &&
       !ui.buy
     )
@@ -53,10 +83,13 @@ export function afterTicks(ui: Ui): void {
     for (const t of stuck) ui.alarmed.add(t.id);
   }
   const sel = ui.selectedTrain();
-  const key = sel ? `${sel.id}|${statusText(ui, sel)}|${loadText(sel)}` : '';
+  const key = sel
+    ? `${sel.id}|${statusText(ui, sel)}|${loadText(sel)}|${sel.model}|${ageText(ui, sel)}|${atStation(ui.game, sel)}`
+    : '';
   if (key !== ui.lastTrainKey) {
     ui.lastTrainKey = key;
-    if (sel && !ui.routing && !ui.carsEdit && !ui.sendTo) ui.renderSheet();
+    if (sel && !ui.routing && !ui.carsEdit && !ui.sendTo && !ui.replacing && ui.retiring === null)
+      ui.renderSheet();
   }
 }
 export function startLoop(ui: Ui): void {

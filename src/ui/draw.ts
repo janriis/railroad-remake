@@ -186,6 +186,7 @@ export function drawTrains(ui: Ui, now: number, z: number): void {
       ctx.arc(head.x, head.y, 0.5, 0, Math.PI * 2);
       ctx.stroke();
     }
+    if (ui.game.isBrokenDown(t)) drawBreakdown(ui, head, now);
     if (t.deadlocked) {
       const pulse = ui.reducedMotion ? 0.5 : 0.5 + 0.12 * Math.sin(now / 160);
       ctx.fillStyle = 'rgba(230,30,20,0.28)';
@@ -313,4 +314,36 @@ export function drawSelection(ui: Ui, z: number): void {
   ctx.beginPath();
   ctx.arc(ui.startTile.x + 0.5, ui.startTile.y + 0.5, 0.16, 0, Math.PI * 2);
   ctx.fill();
+}
+
+/** A warning triangle and a few smoke puffs above a broken-down locomotive. */
+function drawBreakdown(ui: Ui, head: { x: number; y: number }, now: number): void {
+  const ctx = ui.ctx;
+  const t = ui.reducedMotion ? 0 : now / 900;
+  ctx.save();
+  ctx.fillStyle = 'rgba(70,70,70,0.55)';
+  for (let i = 0; i < 3; i++) {
+    const k = (t + i / 3) % 1;
+    ctx.beginPath();
+    ctx.arc(head.x + 0.18 + k * 0.1, head.y - 0.2 - k * 0.45, 0.06 + k * 0.06, 0, Math.PI * 2);
+    ctx.globalAlpha = 1 - k;
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  const cx = head.x - 0.1;
+  const cy = head.y - 0.55;
+  ctx.fillStyle = '#f6aa1c';
+  ctx.strokeStyle = '#1d1a16';
+  ctx.lineWidth = 0.03;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - 0.17);
+  ctx.lineTo(cx + 0.16, cy + 0.11);
+  ctx.lineTo(cx - 0.16, cy + 0.11);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#1d1a16';
+  ctx.fillRect(cx - 0.015, cy - 0.08, 0.03, 0.11);
+  ctx.fillRect(cx - 0.015, cy + 0.05, 0.03, 0.03);
+  ctx.restore();
 }

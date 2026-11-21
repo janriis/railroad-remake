@@ -1,6 +1,16 @@
 import { type Train } from '../sim/trains';
 import type { Ui } from './state';
-import { carsText, loadText, plural, stationNameAt, trainColour, trainName } from './format';
+import {
+  ageText,
+  brokenDaysLeft,
+  carsText,
+  loadText,
+  modelName,
+  plural,
+  stationNameAt,
+  trainColour,
+  trainName,
+} from './format';
 import { $, setText } from './dom';
 import { ROSTER_KEY } from './constants';
 import { beginSend, cancelTripOf } from './sheets/send';
@@ -18,13 +28,17 @@ export interface RosterRow {
   consistText: HTMLElement;
   consistSr: HTMLElement;
   chip: HTMLElement;
+  wear: HTMLElement;
+  model: HTMLElement;
   route: HTMLElement;
   load: HTMLElement;
   trip: HTMLElement;
   tripText: HTMLElement;
   routeKey: string;
 }
-export function chipFor(t: Train): { text: string; cls: string } {
+export function chipFor(t: Train, ui?: Ui): { text: string; cls: string } {
+  if (ui?.game.isBrokenDown(t)) return { text: `Broken down, ${brokenDaysLeft(ui, t)} d`, cls: 'stuck' };
+  if (!ui && t.status === 'broken-down') return { text: 'Broken down', cls: 'stuck' };
   if (t.deadlocked) return { text: 'Stuck', cls: 'stuck' };
   if (t.status === 'waiting') return { text: 'Waiting', cls: 'waiting' };
   if (t.trip) return { text: 'On trip', cls: 'trip' };
@@ -41,7 +55,7 @@ export function makeRosterRow(id: number): RosterRow {
     '<button type="button" class="train-row"><span class="swatch" aria-hidden="true"></span><span class="body">' +
     '<span class="line1"><span class="tname"></span>' +
     `<span class="consist">${LOCO_SVG}<span class="ctext" aria-hidden="true"></span><span class="sr csr"></span></span>` +
-    '<span class="status"></span></span><span class="route"></span><span class="load"></span></span></button>' +
+    '<span class="wear" hidden>Worn out</span><span class="status"></span></span><span class="model"></span><span class="route"></span><span class="load"></span></span></button>' +
     '<span class="row-actions"><button type="button" class="mini txt" data-ract="route">Route</button>' +
     '<button type="button" class="mini txt" data-ract="cars">Cars</button>' +
     '<button type="button" class="mini txt" data-ract="send">Send to…</button></span>';
@@ -60,6 +74,8 @@ export function makeRosterRow(id: number): RosterRow {
     consistText: q('.ctext'),
     consistSr: q('.csr'),
     chip: q('.status'),
+    wear: q('.wear'),
+    model: q('.model'),
     route: q('.route'),
     load: q('.load'),
     trip,
@@ -145,7 +161,10 @@ export function createRoster(ui: Ui): () => void {
         row.consistSr,
         `Locomotive, ${plural(t.passengerCars, 'passenger car')}, ${plural(t.freightCars, 'freight car')}`,
       );
-      const chip = chipFor(t);
+      const chip = chipFor(t, ui);
+      const worn = ui.game.isWornOut(t);
+      row.wear.hidden = !worn;
+      setText(row.model, `${modelName(t)} · ${ageText(ui, t)}`);
       setText(row.chip, chip.text);
       const cls = `status ${chip.cls}`;
       if (row.chip.className !== cls) row.chip.className = cls;

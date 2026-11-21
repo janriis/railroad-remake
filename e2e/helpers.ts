@@ -52,6 +52,11 @@ export function fixtureSave(opts: FixtureOpts = {}): SaveData {
   return g.toSave();
 }
 
+/** Moves a save to the start of `year` (360-day years); trains keep their purchase time, so they age. */
+export function atYear(save: SaveData, year: number): SaveData {
+  return { ...save, time: (year - 1850) * 360 * 24 };
+}
+
 /** Boots the app with `save` in localStorage and waits until the HUD is up. */
 export async function boot(page: Page, save: SaveData): Promise<string[]> {
   const errors: string[] = [];

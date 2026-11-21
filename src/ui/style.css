@@ -992,3 +992,59 @@ button:focus-visible {
   font-size: 13px;
   margin-left: 6px;
 }
+
+/* Locomotive models and wear */
+.model-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-height: 48px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.model-card.on {
+  border: 2px solid var(--accent);
+  padding: 7px 11px;
+}
+.model-card .mc-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.model-card .mc-line {
+  font-size: 13px;
+  color: var(--muted);
+}
+.pill.muted {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.wear {
+  margin-left: auto;
+  border-radius: 999px;
+  border: 1px solid var(--warn);
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--warn);
+  white-space: nowrap;
+}
+.wear[hidden] {
+  display: none;
+}
+.wear + .status {
+  margin-left: 6px;
+}
+.train-row .model {
+  font-size: 12px;
+  color: var(--muted);
+}

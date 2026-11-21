@@ -1,6 +1,6 @@
 {
  "width": 512,
- "height": 713,
+ "height": 778,
  "frames": {
   "building-coal-yard": {
    "x": 1,
@@ -15,7 +15,7 @@
    "h": 43
   },
   "car-passenger": {
-   "x": 1,
+   "x": 261,
    "y": 643,
    "w": 128,
    "h": 37
@@ -92,29 +92,65 @@
    "w": 128,
    "h": 41
   },
-  "loco-courier": {
+  "loco-american": {
+   "x": 1,
+   "y": 643,
+   "w": 128,
+   "h": 41
+  },
+  "loco-atlantic": {
    "x": 131,
-   "y": 682,
+   "y": 721,
    "w": 128,
    "h": 28
   },
-  "loco-hauler": {
+  "loco-consolidation": {
    "x": 1,
-   "y": 682,
+   "y": 721,
    "w": 128,
    "h": 30
   },
-  "loco-ironside": {
+  "loco-mikado": {
    "x": 261,
-   "y": 643,
+   "y": 721,
    "w": 128,
-   "h": 31
+   "h": 25
   },
-  "loco-pathfinder": {
+  "loco-mogul": {
+   "x": 131,
+   "y": 686,
+   "w": 128,
+   "h": 32
+  },
+  "loco-northern": {
+   "x": 131,
+   "y": 753,
+   "w": 128,
+   "h": 21
+  },
+  "loco-pacific": {
+   "x": 1,
+   "y": 753,
+   "w": 128,
+   "h": 24
+  },
+  "loco-road-switcher": {
    "x": 131,
    "y": 643,
    "w": 128,
+   "h": 39
+  },
+  "loco-streamliner": {
+   "x": 1,
+   "y": 686,
+   "w": 128,
    "h": 33
+  },
+  "loco-ten-wheeler": {
+   "x": 261,
+   "y": 686,
+   "w": 128,
+   "h": 31
   },
   "station-large": {
    "x": 131,
