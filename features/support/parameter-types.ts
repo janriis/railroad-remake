@@ -6,6 +6,7 @@ import {
   type BuildingKind,
   type Cargo,
   type IndustryKind,
+  type LocoModel,
 } from '../../src/sim/config';
 import { TERRAINS, type Coord, type Terrain } from '../../src/sim/types';
 
@@ -63,4 +64,11 @@ defineParameterType({
   name: 'building',
   regexp: new RegExp(BUILDING_KINDS.map((k) => k.replace('-', ' ')).join('|')),
   transformer: (s: string): BuildingKind => s.replace(' ', '-') as BuildingKind,
+});
+
+/** Pioneer | Ironside | Courier | Hauler | Pathfinder */
+defineParameterType({
+  name: 'model',
+  regexp: /Pioneer|Ironside|Courier|Hauler|Pathfinder/,
+  transformer: (s: string): LocoModel => s.toLowerCase() as LocoModel,
 });

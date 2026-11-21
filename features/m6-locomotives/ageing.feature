@@ -1,4 +1,4 @@
-@m6 @wip
+@m6
 Feature: Locomotive ageing
   As a railroad owner
   I want locomotives to wear with the years

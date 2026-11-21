@@ -1,4 +1,4 @@
-import { OPPOSING_TRAFFIC_PENALTY_TILES, TICKS_PER_DAY, TILE_UNITS } from './config';
+import { OPPOSING_TRAFFIC_PENALTY_TILES, TICKS_PER_DAY, TILE_UNITS, type LocoModel } from './config';
 import { heading } from './geometry';
 import { findTrackPath, stepUnits } from './pathfinding';
 import type { Lot } from './cargo';
@@ -10,7 +10,7 @@ export interface CarCounts {
   readonly freightCars: number;
 }
 
-export type TrainStatus = 'idle' | 'moving' | 'waiting' | 'at-stop';
+export type TrainStatus = 'idle' | 'moving' | 'waiting' | 'at-stop' | 'broken-down';
 
 /**
  * A train is a point that hops tile to tile. While it moves from `at` to `next` it holds
@@ -25,7 +25,12 @@ export interface Train {
   prev: Coord | null;
   progress: number;
   /** Distance units per tick. */
-  readonly speed: number;
+  speed: number;
+  /** Locomotive model and when it was bought (game hours); reset by an overhaul or replacement. */
+  model: LocoModel;
+  boughtAt: number;
+  /** Broken down until this game hour; it stands still and keeps its place on the line. */
+  brokenUntil: number | null;
   passengerCars: number;
   freightCars: number;
   route: Coord[];
@@ -55,6 +60,7 @@ export const unitsPerTick = (tilesPerDay: number): number => (tilesPerDay * TILE
 export interface MovementContext {
   readonly track: TrackNetwork;
   readonly trains: readonly Train[];
+  readonly time: number;
   isStation(c: Coord): boolean;
   /** Called when a train reaches stop `stopIndex` of its route: unload, change cars, load. */
   serviceStop(t: Train, stopIndex: number): void;
@@ -67,6 +73,13 @@ export function advanceTrains(ctx: MovementContext): void {
 }
 
 function stepTrain(ctx: MovementContext, t: Train): void {
+  if (t.brokenUntil !== null) {
+    if (ctx.time < t.brokenUntil) {
+      t.status = 'broken-down';
+      return;
+    }
+    t.brokenUntil = null;
+  }
   if (t.route.length < 2 && !t.trip) {
     if (!t.next) {
       t.status = 'idle';

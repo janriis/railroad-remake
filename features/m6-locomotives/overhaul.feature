@@ -1,4 +1,4 @@
-@m6 @wip
+@m6
 Feature: Overhauling locomotives
   As a railroad owner
   I want to renew an old locomotive in place

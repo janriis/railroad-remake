@@ -1,4 +1,4 @@
-@m6 @wip
+@m6
 Feature: Breakdowns
   As a railroad owner
   I want old locomotives to break down now and then

@@ -1,4 +1,4 @@
-@m6 @wip
+@m6
 Feature: Locomotive models
   As a railroad owner
   I want to choose between locomotive models that come and go with the years

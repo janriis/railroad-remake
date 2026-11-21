@@ -186,3 +186,88 @@ export const SATURATED_PRICE_RATE = 0.5;
 export const SATURATION_LIMIT = 2;
 /** Extra yearly growth for a town sold at least half its yearly bread demand at full price. */
 export const BREAD_GROWTH_RATE = 0.05;
+
+// --- M6: eras and locomotives -------------------------------------------------------
+
+export const LOCO_MODELS = ['pioneer', 'ironside', 'courier', 'hauler', 'pathfinder'] as const;
+export type LocoModel = (typeof LOCO_MODELS)[number];
+
+/** Original locomotive designs. On sale from `from` to `to` inclusive (no `to`: never retired). */
+export const LOCO: Readonly<
+  Record<
+    LocoModel,
+    {
+      name: string;
+      from: number;
+      to?: number;
+      tilesPerDay: number;
+      maxCars: number;
+      price: number;
+      running: number;
+      /** Working life in years. */
+      life: number;
+    }
+  >
+> = {
+  pioneer: {
+    name: 'Pioneer',
+    from: 1850,
+    to: 1885,
+    tilesPerDay: 4,
+    maxCars: 4,
+    price: 50_000,
+    running: 2_000,
+    life: 20,
+  },
+  ironside: {
+    name: 'Ironside',
+    from: 1870,
+    to: 1910,
+    tilesPerDay: 5,
+    maxCars: 6,
+    price: 80_000,
+    running: 2_600,
+    life: 25,
+  },
+  courier: {
+    name: 'Courier',
+    from: 1895,
+    to: 1940,
+    tilesPerDay: 7,
+    maxCars: 6,
+    price: 120_000,
+    running: 3_400,
+    life: 25,
+  },
+  hauler: {
+    name: 'Hauler',
+    from: 1900,
+    to: 1945,
+    tilesPerDay: 5,
+    maxCars: 8,
+    price: 110_000,
+    running: 3_200,
+    life: 30,
+  },
+  pathfinder: {
+    name: 'Pathfinder',
+    from: 1935,
+    tilesPerDay: 8,
+    maxCars: 8,
+    price: 180_000,
+    running: 3_800,
+    life: 30,
+  },
+};
+
+/** Running cost rises by this share per year of age, compounded. */
+export const AGE_RUNNING_COST_RATE = 0.03;
+/** Monthly breakdown chance within the working life, and the extra per year past it. */
+export const BREAKDOWN_CHANCE = 0.01;
+export const BREAKDOWN_CHANCE_PER_YEAR_WORN = 0.02;
+export const BREAKDOWN_DAYS = 3;
+/** Repairs after a breakdown, overhaul price, and trade-in as shares of the model's price. */
+export const REPAIR_RATE = 0.05;
+export const OVERHAUL_RATE = 0.3;
+export const TRADE_IN_NEW_RATE = 0.5;
+export const TRADE_IN_WORN_RATE = 0.1;

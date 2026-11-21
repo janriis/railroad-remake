@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import type { LocoModel } from '../../src/sim/config';
 import { Given, Then, When, type DataTable } from '@cucumber/cucumber';
 import { STATION_SIZES, TICKS_PER_DAY, type StationSize } from '../../src/sim/config';
 import type { CarCounts } from '../../src/sim/trains';
@@ -52,9 +53,11 @@ When(
   /^I buy (.+?) at (?:the station at )?\((\d+), (\d+)\)$/,
   function (this: SimWorld, what: string, x: string, y: string) {
     const count = (re: RegExp) => Number(what.match(re)?.[1] ?? 0);
+    const loco = what.match(/\ban? (?:(\w+) )?locomotive\b/);
     const order = {
       at: { x: Number(x), y: Number(y) },
-      locomotive: /\ba locomotive\b/.test(what),
+      locomotive: loco !== null,
+      ...(loco?.[1] ? { model: loco[1].toLowerCase() as LocoModel } : {}),
       passengerCars: count(/(\d+) passenger cars?/),
       freightCars: count(/(\d+) freight cars?/),
     };

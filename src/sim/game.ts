@@ -5,12 +5,20 @@ import {
   DEMOLISH_REFUND_RATE,
   DIAGONAL_COST_FACTOR,
   FREIGHT_CAR_COST,
-  LOCOMOTIVE_COST,
-  LOCOMOTIVE_TILES_PER_DAY,
   MAX_BRIDGE_WATER_TILES,
-  MAX_CARS,
   PASSENGER_CAR_COST,
+  AGE_RUNNING_COST_RATE,
   BREAD_GROWTH_RATE,
+  BREAKDOWN_CHANCE,
+  BREAKDOWN_CHANCE_PER_YEAR_WORN,
+  BREAKDOWN_DAYS,
+  LOCO,
+  LOCO_MODELS,
+  OVERHAUL_RATE,
+  REPAIR_RATE,
+  TRADE_IN_NEW_RATE,
+  TRADE_IN_WORN_RATE,
+  type LocoModel,
   BUILDING,
   BUILDING_REFUND_RATE,
   BUILDING_SLOTS,
@@ -29,7 +37,6 @@ import {
   TOWN_GROWTH_RATE,
   type Cargo,
   type IndustryKind,
-  LOCOMOTIVE_RUNNING_COST,
   STATION,
   TICKS_PER_DAY,
   TRACK_MAINTENANCE_PER_SEGMENT,
@@ -48,6 +55,7 @@ import {
   type WaitingLot,
 } from './cargo';
 import {
+  DAYS_PER_YEAR,
   TICKS_PER_MONTH,
   dateAt,
   emptyLedgerYear,
@@ -106,6 +114,8 @@ export interface StationBuilding {
 export interface TrainOrder {
   at: Coord;
   locomotive: boolean;
+  /** Locomotive model; defaults to the Pioneer. */
+  model?: LocoModel;
   passengerCars?: number;
   freightCars?: number;
 }
@@ -131,6 +141,9 @@ export interface SaveData {
     lastStop?: Coord | null;
     /** Tile it came from, so it keeps facing the same way after loading. */
     prev?: Coord | null;
+    model?: LocoModel;
+    boughtAt?: number;
+    brokenUntil?: number | null;
   }[];
   readonly towns?: {
     population: number;
@@ -406,7 +419,7 @@ export class Game {
 
   trainPrice(order: TrainOrder): number {
     return (
-      (order.locomotive ? LOCOMOTIVE_COST : 0) +
+      (order.locomotive ? LOCO[order.model ?? 'pioneer'].price : 0) +
       (order.passengerCars ?? 0) * PASSENGER_CAR_COST +
       (order.freightCars ?? 0) * FREIGHT_CAR_COST
     );
@@ -415,7 +428,9 @@ export class Game {
   buyTrain(order: TrainOrder): { ok: true; cost: number; train: Train } | { ok: false; error: string } {
     const cars = (order.passengerCars ?? 0) + (order.freightCars ?? 0);
     if (!order.locomotive) return fail('cars need a locomotive');
-    if (cars > MAX_CARS) return fail('too many cars');
+    const model = order.model ?? 'pioneer';
+    if (!this.onSale(model)) return fail('model not on sale');
+    if (cars > LOCO[model].maxCars) return fail('too many cars');
     if (!this.isStation(order.at)) return fail('train must start at a station');
     const cost = this.trainPrice(order);
     if (cost > this.cash) return fail('insufficient funds');
@@ -425,14 +440,24 @@ export class Game {
   }
 
   /** Loading/fixture API: place a train without checks or cost. */
-  addTrain(opts: { at: Coord; tilesPerDay?: number; passengerCars?: number; freightCars?: number }): Train {
+  addTrain(opts: {
+    at: Coord;
+    model?: LocoModel;
+    tilesPerDay?: number;
+    passengerCars?: number;
+    freightCars?: number;
+  }): Train {
+    const model = opts.model ?? 'pioneer';
     const train: Train = {
       id: this.nextId++,
       at: opts.at,
       next: null,
       prev: null,
       progress: 0,
-      speed: unitsPerTick(opts.tilesPerDay ?? LOCOMOTIVE_TILES_PER_DAY),
+      speed: unitsPerTick(opts.tilesPerDay ?? LOCO[model].tilesPerDay),
+      model,
+      boughtAt: this.time,
+      brokenUntil: null,
       passengerCars: opts.passengerCars ?? 0,
       freightCars: opts.freightCars ?? 0,
       route: [],
@@ -501,7 +526,7 @@ export class Game {
     const train = this.train(trainId);
     if (!train) return fail('no such train');
     if (cars.passengerCars < 0 || cars.freightCars < 0) return fail('car counts cannot be negative');
-    if (cars.passengerCars + cars.freightCars > MAX_CARS) return fail('too many cars');
+    if (cars.passengerCars + cars.freightCars > LOCO[train.model].maxCars) return fail('too many cars');
     const price = (n: number, unit: number) => (n > 0 ? n * unit : Math.round(n * unit * CAR_RESALE_RATE));
     const cost =
       price(cars.passengerCars - train.passengerCars, PASSENGER_CAR_COST) +
@@ -831,6 +856,119 @@ export class Game {
     for (const station of this.stations.values()) for (const b of station.buildings) b.madeThisYear = 0;
   }
 
+  // --- Locomotives: eras, ageing, breakdowns -------------------------------------
+
+  /** How breakdowns are decided; tests force them on or off. */
+  breakdowns: 'random' | 'always' | 'never' = 'random';
+
+  onSale(model: LocoModel, year = this.date.year): boolean {
+    const m = LOCO[model];
+    return m.from <= year && (m.to === undefined || year <= m.to);
+  }
+
+  modelsOnSale(year = this.date.year): LocoModel[] {
+    return LOCO_MODELS.filter((m) => this.onSale(m, year));
+  }
+
+  /** Whole 360-day years since the locomotive was bought (or last overhauled). */
+  trainAge(train: Train): number {
+    return Math.floor((this.time - train.boughtAt) / (TICKS_PER_DAY * DAYS_PER_YEAR));
+  }
+
+  isWornOut(train: Train): boolean {
+    return this.trainAge(train) >= LOCO[train.model].life;
+  }
+
+  workingLifeLeft(train: Train): number {
+    return Math.max(0, LOCO[train.model].life - this.trainAge(train));
+  }
+
+  /** The locomotive's monthly running cost: base x 1.03^age, in whole dollars. */
+  locoRunningCost(train: Train): number {
+    return Math.round(LOCO[train.model].running * (1 + AGE_RUNNING_COST_RATE) ** this.trainAge(train));
+  }
+
+  breakdownChance(train: Train): number {
+    const past = this.trainAge(train) - LOCO[train.model].life;
+    return past < 0 ? BREAKDOWN_CHANCE : BREAKDOWN_CHANCE + BREAKDOWN_CHANCE_PER_YEAR_WORN * past;
+  }
+
+  isBrokenDown(train: Train): boolean {
+    return train.brokenUntil !== null && this.time < train.brokenUntil;
+  }
+
+  /** Month end: every running train rolls for a breakdown; repairs are paid straight away. */
+  private rollBreakdowns(year: number): void {
+    for (const train of this.trains) {
+      if (this.isBrokenDown(train)) continue;
+      const roll = this.rng.next();
+      const broken =
+        this.breakdowns === 'always' || (this.breakdowns === 'random' && roll < this.breakdownChance(train));
+      if (!broken) continue;
+      train.brokenUntil = this.time + BREAKDOWN_DAYS * TICKS_PER_DAY;
+      train.status = 'broken-down';
+      this.spend(Math.round(LOCO[train.model].price * REPAIR_RATE), 'trainRunning', year);
+    }
+  }
+
+  /** A train standing still on a station tile. */
+  private atStation(train: Train): boolean {
+    return train.next === null && this.isStation(train.at);
+  }
+
+  /** Make the locomotive as good as new (age 0) for 30% of its price. */
+  overhaul(trainId: number): CommandResult {
+    const train = this.train(trainId);
+    if (!train) return fail('no such train');
+    if (!this.atStation(train)) return fail('train must be at a station');
+    if (!this.onSale(train.model)) return fail('model no longer on sale');
+    const cost = Math.round(LOCO[train.model].price * OVERHAUL_RATE);
+    if (cost > this.cash) return fail('insufficient funds');
+    train.boughtAt = this.time;
+    this.spend(cost, 'rollingStock');
+    return ok(cost);
+  }
+
+  /** What the current locomotive is worth when traded in: 50% new, falling to 10% over its working life. */
+  tradeInValue(train: Train): number {
+    const m = LOCO[train.model];
+    const worn = Math.min(1, this.trainAge(train) / m.life);
+    return Math.round(m.price * (TRADE_IN_NEW_RATE - (TRADE_IN_NEW_RATE - TRADE_IN_WORN_RATE) * worn));
+  }
+
+  /**
+   * Swap the locomotive for a model on sale. Pays the new price minus the trade-in; cars the new model
+   * cannot pull are sold (passenger cars are kept first). Cars, route, orders and cargo stay.
+   */
+  replaceLocomotive(trainId: number, model: LocoModel): CommandResult {
+    const train = this.train(trainId);
+    if (!train) return fail('no such train');
+    if (!this.atStation(train)) return fail('train must be at a station');
+    if (!this.onSale(model)) return fail('model not on sale');
+    const max = LOCO[model].maxCars;
+    const passengerCars = Math.min(train.passengerCars, max);
+    const freightCars = Math.min(train.freightCars, max - passengerCars);
+    const resale =
+      Math.round((train.passengerCars - passengerCars) * PASSENGER_CAR_COST * CAR_RESALE_RATE) +
+      Math.round((train.freightCars - freightCars) * FREIGHT_CAR_COST * CAR_RESALE_RATE);
+    const cost = LOCO[model].price - this.tradeInValue(train) - resale;
+    if (cost > this.cash) return fail('insufficient funds');
+    train.model = model;
+    train.boughtAt = this.time;
+    train.speed = unitsPerTick(LOCO[model].tilesPerDay);
+    if (passengerCars !== train.passengerCars || freightCars !== train.freightCars) {
+      train.passengerCars = passengerCars;
+      train.freightCars = freightCars;
+      trimToCapacity(train);
+      const owned = passengerCars + freightCars;
+      train.stopOrders = train.stopOrders.map((o) =>
+        o && o.passengerCars + o.freightCars === owned ? o : null,
+      );
+    }
+    this.spend(cost, 'rollingStock');
+    return ok(cost);
+  }
+
   // --- Time --------------------------------------------------------------------
 
   tick(): void {
@@ -848,7 +986,7 @@ export class Game {
     const cars = this.trains.reduce((n, t) => n + t.passengerCars + t.freightCars, 0);
     return {
       trackMaintenance: this.track.lineCount * TRACK_MAINTENANCE_PER_SEGMENT,
-      trainRunning: this.trains.length * LOCOMOTIVE_RUNNING_COST + cars * CAR_RUNNING_COST,
+      trainRunning: this.trains.reduce((n, t) => n + this.locoRunningCost(t), 0) + cars * CAR_RUNNING_COST,
     };
   }
 
@@ -864,6 +1002,7 @@ export class Game {
     const costs = this.monthlyRunningCosts();
     this.spend(costs.trackMaintenance, 'trackMaintenance', year);
     this.spend(costs.trainRunning, 'trainRunning', year);
+    this.rollBreakdowns(year);
   }
 
   // --- Money -------------------------------------------------------------------
@@ -914,6 +1053,9 @@ export class Game {
         trip: t.trip,
         lastStop: t.lastStop,
         prev: t.prev,
+        model: t.model,
+        boughtAt: t.boughtAt,
+        brokenUntil: t.brokenUntil,
       })),
       towns: this.towns.map((t) => ({
         population: t.population,
@@ -961,6 +1103,9 @@ export class Game {
       train.trip = t.trip ?? null;
       train.lastStop = t.lastStop ?? null;
       train.prev = t.prev ?? null;
+      train.model = t.model ?? 'pioneer';
+      train.boughtAt = t.boughtAt ?? 0;
+      train.brokenUntil = t.brokenUntil ?? null;
     }
     return game;
   }

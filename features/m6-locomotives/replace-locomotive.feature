@@ -1,4 +1,4 @@
-@m6 @wip
+@m6
 Feature: Replacing locomotives
   As a railroad owner
   I want to swap an old locomotive for a newer model

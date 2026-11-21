@@ -8,6 +8,8 @@ Given(
   'a new game on a {int}x{int} map of {terrain}',
   function (this: SimWorld, width: number, height: number, terrain: Terrain) {
     this.game = Game.create({ width, height, terrain, seed: 1 });
+    // Random breakdowns would make money and timing scenarios flaky; breakdown scenarios switch them on.
+    this.game.breakdowns = 'never';
   },
 );
 
