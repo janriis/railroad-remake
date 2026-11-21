@@ -180,8 +180,8 @@ function blockerFor(ctx: MovementContext, t: Train, n: Coord): number | null {
     if (o === t) continue;
     if (!o.next) {
       if (!sameCoord(o.at, n)) continue;
-      // On a double line a standing train only blocks the line it arrived on.
-      if (!shared || (!station && (o.prev === null || sameCoord(o.prev, t.at)))) return o.id;
+      // On a double line a standing train only blocks its own line: the one it is facing along.
+      if (!shared || (!station && sameDirection(o, t.at))) return o.id;
       continue;
     }
     const sameLine = double
@@ -229,6 +229,16 @@ function opposingInSection(ctx: MovementContext, t: Train): number | null {
     if (towardsUs) return o.id;
   }
   return null;
+}
+
+/**
+ * Whether standing train `o` faces the same way as a train arriving from `from`: it is heading
+ * away from `from` (or, with no plan, it came from `from` or we cannot tell).
+ */
+function sameDirection(o: Train, from: Coord): boolean {
+  const ahead = o.plan[0];
+  if (ahead) return !sameCoord(ahead, from);
+  return o.prev === null || sameCoord(o.prev, from);
 }
 
 const sameSegment = (a: Coord, b: Coord, c: Coord, d: Coord): boolean =>

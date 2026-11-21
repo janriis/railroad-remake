@@ -106,6 +106,8 @@ export interface SaveData {
     cargo?: Lot[];
     trip?: Coord | null;
     lastStop?: Coord | null;
+    /** Tile it came from, so it keeps facing the same way after loading. */
+    prev?: Coord | null;
   }[];
   readonly towns?: { population: number; generatedThisYear: number; carriedThisYear: number }[];
   readonly stationWaiting?: WaitingLot[][];
@@ -733,6 +735,7 @@ export class Game {
         cargo: t.cargo,
         trip: t.trip,
         lastStop: t.lastStop,
+        prev: t.prev,
       })),
       towns: this.towns.map((t) => ({
         population: t.population,
@@ -765,6 +768,7 @@ export class Game {
       train.cargo = t.cargo ?? [];
       train.trip = t.trip ?? null;
       train.lastStop = t.lastStop ?? null;
+      train.prev = t.prev ?? null;
     }
     return game;
   }

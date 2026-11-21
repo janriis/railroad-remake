@@ -95,3 +95,26 @@ Feature: Double track
     Then both trains should have completed a journey
     And no train should be deadlocked
     And no line should have held two trains at once
+
+  Scenario: Trains standing face to face on double track get past each other
+    Given existing double track from (2, 5) to (18, 5)
+    And a small station exists at (2, 5)
+    And a small station exists at (18, 5)
+    And a train exists at (9, 5) with the route (18, 5), (2, 5)
+    And a train exists at (10, 5) with the route (2, 5), (18, 5)
+    When 10 days pass
+    Then both trains should have completed a journey
+    And no train should be deadlocked
+
+  Scenario: Trains stuck head-on get moving once their track is doubled
+    Given existing track from (2, 5) to (18, 5)
+    And a small station exists at (2, 5)
+    And a small station exists at (18, 5)
+    And a train exists at (6, 5) with the route (18, 5), (2, 5)
+    And a train exists at (14, 5) with the route (2, 5), (18, 5)
+    And 5 days pass
+    And the trains should be reported as deadlocked
+    When I double the track from (2, 5) to (18, 5)
+    And 10 days pass
+    Then both trains should have completed a journey
+    And no train should be deadlocked any more

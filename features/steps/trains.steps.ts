@@ -168,6 +168,10 @@ Then('no train should be deadlocked', function (this: SimWorld) {
   assert.equal(this.everDeadlocked, false);
 });
 
+Then('no train should be deadlocked any more', function (this: SimWorld) {
+  for (const t of this.game.trains) assert.equal(t.deadlocked, false, `train ${t.id} is still deadlocked`);
+});
+
 Then('the trains should be reported as deadlocked', function (this: SimWorld) {
   for (const t of this.game.trains) assert.ok(t.deadlocked, `train ${t.id} is not deadlocked`);
 });
