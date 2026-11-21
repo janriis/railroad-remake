@@ -34,3 +34,27 @@ export const MAPGEN = {
   /** One town per this many tiles, at least 2. */
   tilesPerTown: 1024,
 } as const;
+
+// --- M2: stations & trains ----------------------------------------------------
+
+export const STATION_SIZES = ['small', 'medium', 'large'] as const;
+export type StationSize = (typeof STATION_SIZES)[number];
+export const STATION: Readonly<Record<StationSize, { cost: number; radius: number }>> = {
+  small: { cost: 5_000, radius: 1 },
+  medium: { cost: 15_000, radius: 2 },
+  large: { cost: 40_000, radius: 3 },
+};
+
+export const LOCOMOTIVE_COST = 50_000;
+export const PASSENGER_CAR_COST = 10_000;
+export const FREIGHT_CAR_COST = 8_000;
+export const MAX_CARS = 6;
+
+/** 1 tick = 1 game hour. */
+export const TICKS_PER_DAY = 24;
+/** Distance units per orthogonal tile step; a diagonal step is 1.5×. Chosen so speeds stay integral. */
+export const TILE_UNITS = 48;
+export const DIAGONAL_UNITS = 72;
+export const LOCOMOTIVE_TILES_PER_DAY = 4;
+/** Routing penalty (in tiles) for each segment another train plans to run the opposite way. */
+export const OPPOSING_TRAFFIC_PENALTY_TILES = 4;

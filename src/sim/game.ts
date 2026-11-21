@@ -3,14 +3,26 @@ import {
   DEFAULT_STARTING_CASH,
   DEMOLISH_REFUND_RATE,
   DIAGONAL_COST_FACTOR,
+  FREIGHT_CAR_COST,
+  LOCOMOTIVE_COST,
+  LOCOMOTIVE_TILES_PER_DAY,
   MAX_BRIDGE_WATER_TILES,
+  MAX_CARS,
+  PASSENGER_CAR_COST,
+  STATION,
+  TICKS_PER_DAY,
+  TILE_UNITS,
   TRACK_COST,
+  type StationSize,
 } from './config';
 import { GameMap } from './map';
 import { generateWorld, type Town } from './mapgen';
+import { findTrackPath } from './pathfinding';
+import { planTrack, priceRoute, type PlanOptions, type PlanResult, type TrackPlan } from './planner';
 import { Rng } from './rng';
 import { TrackNetwork, isAdjacent, isDiagonal, straightPath } from './track';
-import { fail, ok, type CommandResult, type Coord, type Terrain } from './types';
+import { advanceTrains, unitsPerTick, type Train } from './trains';
+import { coordKey, fail, ok, type CommandResult, type Coord, type Terrain } from './types';
 
 export interface GameOptions {
   width: number;
@@ -28,6 +40,39 @@ export interface GenerateOptions {
   towns?: number;
 }
 
+export interface Station {
+  readonly id: number;
+  readonly at: Coord;
+  readonly size: StationSize;
+  readonly radius: number;
+}
+
+export interface TrainOrder {
+  at: Coord;
+  locomotive: boolean;
+  passengerCars?: number;
+  freightCars?: number;
+}
+
+export interface SaveData {
+  readonly version: 1;
+  readonly gen: GenerateOptions;
+  readonly cash: number;
+  readonly time: number;
+  readonly segments: { a: Coord; b: Coord; bridge: boolean }[];
+  readonly stations: { at: Coord; size: StationSize }[];
+  readonly trains: {
+    at: Coord;
+    tilesPerDay: number;
+    passengerCars: number;
+    freightCars: number;
+    route: Coord[];
+    target: number;
+  }[];
+}
+
+const fmt = (c: Coord) => `(${c.x}, ${c.y})`;
+
 /**
  * The single entry point for changing game state. Every command is atomic:
  * it either succeeds and applies all its effects, or fails and changes nothing.
@@ -36,13 +81,20 @@ export interface GenerateOptions {
 export class Game {
   readonly track = new TrackNetwork();
   readonly rng: Rng;
+  readonly stations = new Map<string, Station>();
+  readonly trains: Train[] = [];
   cash: number;
+  /** Game hours since the start. */
+  time = 0;
+  private nextId = 1;
 
   private constructor(
     readonly map: GameMap,
     readonly towns: readonly Town[],
     seed: number,
     startingCash: number,
+    /** How the map was generated; null for hand-made test maps. */
+    readonly gen: GenerateOptions | null,
   ) {
     this.rng = new Rng(seed);
     this.cash = startingCash;
@@ -51,14 +103,16 @@ export class Game {
   /** A blank map of one terrain, for tests and sandboxes. */
   static create(opts: GameOptions): Game {
     const map = new GameMap(opts.width, opts.height, opts.terrain ?? 'plains');
-    return new Game(map, [], opts.seed ?? 1, opts.startingCash ?? DEFAULT_STARTING_CASH);
+    return new Game(map, [], opts.seed ?? 1, opts.startingCash ?? DEFAULT_STARTING_CASH, null);
   }
 
   /** A generated map with terrain and towns. */
   static generate(opts: GenerateOptions): Game {
     const { map, towns } = generateWorld(opts);
-    return new Game(map, towns, opts.seed, opts.startingCash ?? DEFAULT_STARTING_CASH);
+    return new Game(map, towns, opts.seed, opts.startingCash ?? DEFAULT_STARTING_CASH, { ...opts });
   }
+
+  // --- Track -------------------------------------------------------------------
 
   /** Price of a single ordinary segment, or an error message if it cannot be built. */
   segmentCost(a: Coord, b: Coord): number | string {
@@ -127,6 +181,35 @@ export class Game {
     return quote;
   }
 
+  /** Suggest the cheapest track route between two tiles (reusing existing track). Changes nothing. */
+  planTrack(from: Coord, to: Coord, opts: PlanOptions = {}): PlanResult {
+    return planTrack(this, from, to, opts);
+  }
+
+  /**
+   * Build a suggested route. Routes with new bridges need `confirmBridges`, so the
+   * player always agrees to a water crossing. The price is re-checked against today's state.
+   */
+  buildPlannedTrack(plan: TrackPlan, opts: { confirmBridges?: boolean } = {}): CommandResult {
+    if (plan.bridges.length > 0 && !opts.confirmBridges) return fail('route needs a bridge');
+    const price = priceRoute(this, plan.path, plan.bridgeSegments);
+    if (typeof price === 'string') return fail(price);
+    if (price.cost > this.cash) return fail('insufficient funds');
+    for (let i = 1; i < plan.path.length; i++) {
+      const [a, b] = [plan.path[i - 1]!, plan.path[i]!];
+      if (!this.track.has(a, b)) this.track.add(a, b, plan.bridgeSegments[i - 1]!);
+    }
+    this.cash -= price.cost;
+    return ok(price.cost);
+  }
+
+  /** Plan and build the cheapest route in one go. */
+  connect(from: Coord, to: Coord, opts: PlanOptions & { confirmBridges?: boolean } = {}): CommandResult {
+    const planned = this.planTrack(from, to, opts);
+    if (!planned.ok) return fail(planned.error);
+    return this.buildPlannedTrack(planned.plan, opts);
+  }
+
   /** What tearing up one existing segment pays back. */
   demolishRefund(a: Coord, b: Coord): number {
     const seg = this.track.get(a, b);
@@ -143,9 +226,169 @@ export class Game {
     for (let i = 1; i < path.length; i++)
       if (this.track.has(path[i - 1]!, path[i]!)) existing.push([path[i - 1]!, path[i]!]);
     if (existing.length === 0) return fail('no track to demolish');
+    const touched = existing.flat();
+    if (touched.some((c) => this.stationAt(c))) return fail('station on track');
+    const trainTiles = this.trains.flatMap((t) => (t.next ? [t.at, t.next] : [t.at]));
+    if (touched.some((c) => trainTiles.some((tc) => tc.x === c.x && tc.y === c.y)))
+      return fail('train on track');
     const refund = existing.reduce((sum, [a, b]) => sum + this.demolishRefund(a, b), 0);
     for (const [a, b] of existing) this.track.remove(a, b);
     this.cash += refund;
     return ok(-refund);
+  }
+
+  // --- Stations ----------------------------------------------------------------
+
+  stationAt(c: Coord): Station | undefined {
+    return this.stations.get(coordKey(c));
+  }
+
+  isStation(c: Coord): boolean {
+    return this.stations.has(coordKey(c));
+  }
+
+  inCatchment(station: Station, c: Coord): boolean {
+    return Math.max(Math.abs(station.at.x - c.x), Math.abs(station.at.y - c.y)) <= station.radius;
+  }
+
+  buildStation(size: StationSize, at: Coord): CommandResult {
+    if (!this.map.inBounds(at)) return fail('out of bounds');
+    if (this.isStation(at)) return fail('tile already has a station');
+    if (!this.track.touches(at)) return fail('station must be on track');
+    const { cost } = STATION[size];
+    if (cost > this.cash) return fail('insufficient funds');
+    this.addStation(size, at);
+    this.cash -= cost;
+    return ok(cost);
+  }
+
+  /** Loading/fixture API: place a station without checks or cost. */
+  addStation(size: StationSize, at: Coord): Station {
+    const station = { id: this.nextId++, at, size, radius: STATION[size].radius };
+    this.stations.set(coordKey(at), station);
+    return station;
+  }
+
+  // --- Trains ------------------------------------------------------------------
+
+  trainPrice(order: TrainOrder): number {
+    return (
+      (order.locomotive ? LOCOMOTIVE_COST : 0) +
+      (order.passengerCars ?? 0) * PASSENGER_CAR_COST +
+      (order.freightCars ?? 0) * FREIGHT_CAR_COST
+    );
+  }
+
+  buyTrain(order: TrainOrder): { ok: true; cost: number; train: Train } | { ok: false; error: string } {
+    const cars = (order.passengerCars ?? 0) + (order.freightCars ?? 0);
+    if (!order.locomotive) return fail('cars need a locomotive');
+    if (cars > MAX_CARS) return fail('too many cars');
+    if (!this.isStation(order.at)) return fail('train must start at a station');
+    const cost = this.trainPrice(order);
+    if (cost > this.cash) return fail('insufficient funds');
+    const train = this.addTrain({ ...order });
+    this.cash -= cost;
+    return { ok: true, cost, train };
+  }
+
+  /** Loading/fixture API: place a train without checks or cost. */
+  addTrain(opts: { at: Coord; tilesPerDay?: number; passengerCars?: number; freightCars?: number }): Train {
+    const train: Train = {
+      id: this.nextId++,
+      at: opts.at,
+      next: null,
+      prev: null,
+      progress: 0,
+      speed: unitsPerTick(opts.tilesPerDay ?? LOCOMOTIVE_TILES_PER_DAY),
+      passengerCars: opts.passengerCars ?? 0,
+      freightCars: opts.freightCars ?? 0,
+      route: [],
+      target: 0,
+      plan: [],
+      status: 'idle',
+      blockedBy: null,
+      waitingTicks: 0,
+      deadlocked: false,
+      journeys: 0,
+      waitedFor: new Set(),
+    };
+    this.trains.push(train);
+    return train;
+  }
+
+  train(id: number): Train | undefined {
+    return this.trains.find((t) => t.id === id);
+  }
+
+  /**
+   * Give a train its stops. It heads for the first stop, or the second if it already
+   * stands on the first, and then cycles through them.
+   */
+  setRoute(trainId: number, stops: readonly Coord[]): CommandResult {
+    const train = this.train(trainId);
+    if (!train) return fail('no such train');
+    if (stops.length < 2) return fail('route needs at least two stops');
+    for (let i = 0; i < stops.length; i++) {
+      if (!this.isStation(stops[i]!)) return fail('stop is not a station');
+      const next = stops[(i + 1) % stops.length]!;
+      if (next.x === stops[i]!.x && next.y === stops[i]!.y) return fail('consecutive stops must differ');
+    }
+    const legs: [Coord, Coord][] = [[train.at, stops[0]!]];
+    for (let i = 1; i < stops.length; i++) legs.push([stops[i - 1]!, stops[i]!]);
+    for (const [a, b] of legs)
+      if (!findTrackPath(this.track, a, b)) return fail(`no track connects ${fmt(a)} and ${fmt(b)}`);
+
+    train.route = stops.map((c) => ({ ...c }));
+    train.target = train.at.x === stops[0]!.x && train.at.y === stops[0]!.y ? 1 : 0;
+    train.plan = [];
+    return ok(0);
+  }
+
+  // --- Time --------------------------------------------------------------------
+
+  tick(): void {
+    this.time++;
+    advanceTrains(this);
+  }
+
+  advanceDays(days: number): void {
+    for (let i = 0; i < days * TICKS_PER_DAY; i++) this.tick();
+  }
+
+  // --- Save / load -------------------------------------------------------------
+
+  toSave(): SaveData {
+    if (!this.gen) throw new Error('only generated maps can be saved');
+    return {
+      version: 1,
+      gen: this.gen,
+      cash: this.cash,
+      time: this.time,
+      segments: [...this.track.segments()].map((s) => ({ a: s.a, b: s.b, bridge: s.bridge })),
+      stations: [...this.stations.values()].map((s) => ({ at: s.at, size: s.size })),
+      trains: this.trains.map((t) => ({
+        at: t.at,
+        tilesPerDay: (t.speed * TICKS_PER_DAY) / TILE_UNITS,
+        passengerCars: t.passengerCars,
+        freightCars: t.freightCars,
+        route: t.route,
+        target: t.target,
+      })),
+    };
+  }
+
+  /** Restores a save. Trains restart from the tile they last reached. */
+  static fromSave(save: SaveData): Game {
+    const game = Game.generate(save.gen);
+    game.cash = save.cash;
+    game.time = save.time;
+    for (const s of save.segments) game.track.add(s.a, s.b, s.bridge);
+    for (const s of save.stations) game.addStation(s.size, s.at);
+    for (const t of save.trains) {
+      const train = game.addTrain(t);
+      train.route = t.route;
+      train.target = t.target;
+    }
+    return game;
   }
 }

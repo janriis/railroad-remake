@@ -1,4 +1,4 @@
-@m2 @wip
+@m2
 Feature: Train movement
   As a railroad owner
   I want trains to run along my track over time

@@ -1,10 +1,12 @@
-@m2 @wip
+@m2
 Feature: Block signalling
   As a railroad owner
   I want trains never to share a stretch of track
   So that my network runs without collisions
 
-  Each track segment is a block. A block holds at most one train; a train waits when the next block is occupied.
+  Each track segment is a block. A moving train holds its segment and the tiles at both ends;
+  station tiles can hold several trains. A train waits when the way ahead is taken.
+  Every scenario also checks, hour by hour, that no segment ever held two trains.
 
   Background:
     Given a new game on a 20x20 map of plains
@@ -13,18 +15,20 @@ Feature: Block signalling
     And a small station exists at (2, 5)
     And a small station exists at (18, 5)
 
-  Scenario: A train waits behind a slower train
-    Given a slow train exists at (6, 5) with the route (2, 5), (18, 5)
+  Scenario: A train catches up with a slower train and waits behind it
+    Given a slow train exists at (6, 5) with the route (18, 5), (2, 5)
+    And a train exists at the station at (2, 5) with the route (2, 5), (18, 5)
+    When 3 days pass
+    Then the following train should have waited behind the slow train
+    And the following train should be behind the slow train
+    And no segment should have held two trains at once
+
+  Scenario: A waiting train departs once the block is free
+    Given a slow train exists at (3, 5) with the route (18, 5), (2, 5)
     And a train exists at the station at (2, 5) with the route (2, 5), (18, 5)
     When 1 days pass
-    Then the two trains should never have shared a segment
-    And the following train should be waiting behind the slow train
-
-  Scenario: Two trains in the same direction never occupy the same segment
-    Given a train exists at the station at (2, 5) with the route (2, 5), (18, 5)
-    And a slow train exists at (3, 5) with the route (2, 5), (18, 5)
-    When 10 days pass
-    Then no segment should have held two trains at once
+    Then the following train should have waited behind the slow train
+    And the following train should have left its first stop
 
   Scenario: Trains pass each other at a passing loop
     Given existing track from (8, 5) to (8, 7)
@@ -32,18 +36,22 @@ Feature: Block signalling
     And existing track from (12, 7) to (12, 5)
     And a train exists at the station at (2, 5) with the route (2, 5), (18, 5)
     And a train exists at the station at (18, 5) with the route (18, 5), (2, 5)
-    When 10 days pass
+    When 6 days pass
     Then no segment should have held two trains at once
     And both trains should have completed a journey
+    And no train should be deadlocked
 
-  Scenario: Head-on trains on single track wait for each other
+  Scenario: Head-on trains on single track are reported as deadlocked
     Given a train exists at the station at (2, 5) with the route (2, 5), (18, 5)
     And a train exists at the station at (18, 5) with the route (18, 5), (2, 5)
     When 10 days pass
     Then the trains should be reported as deadlocked
+    And no segment should have held two trains at once
 
-  Scenario: A waiting train departs once the block is free
-    Given a slow train exists at (6, 5) with the route (2, 5), (18, 5)
+  Scenario: Trains pass each other inside a station
+    Given a small station exists at (10, 5)
     And a train exists at the station at (2, 5) with the route (2, 5), (18, 5)
-    When 5 days pass
-    Then the following train should have left its first stop
+    And a train exists at the station at (18, 5) with the route (18, 5), (2, 5)
+    When 4 days pass
+    Then both trains should have completed a journey
+    And no train should be deadlocked

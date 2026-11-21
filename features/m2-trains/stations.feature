@@ -1,4 +1,4 @@
-@m2 @wip
+@m2
 Feature: Stations
   As a railroad owner
   I want to build stations on my track

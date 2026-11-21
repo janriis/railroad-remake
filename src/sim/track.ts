@@ -6,6 +6,17 @@ export interface Segment {
   readonly bridge: boolean;
 }
 
+const NEIGHBOR_OFFSETS: readonly [number, number][] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+  [1, 1],
+  [1, -1],
+  [-1, 1],
+  [-1, -1],
+];
+
 /** Undirected graph of track segments between 8-neighbour tiles. */
 export class TrackNetwork {
   private readonly segs = new Map<string, Segment>();
@@ -29,6 +40,21 @@ export class TrackNetwork {
 
   remove(a: Coord, b: Coord): void {
     this.segs.delete(TrackNetwork.segmentKey(a, b));
+  }
+
+  /** Tiles joined to `c` by a segment, in a fixed direction order. */
+  neighbors(c: Coord): Coord[] {
+    const out: Coord[] = [];
+    for (const [dx, dy] of NEIGHBOR_OFFSETS) {
+      const n = { x: c.x + dx, y: c.y + dy };
+      if (this.has(c, n)) out.push(n);
+    }
+    return out;
+  }
+
+  /** True if any segment ends at `c`. */
+  touches(c: Coord): boolean {
+    return this.neighbors(c).length > 0;
   }
 
   segments(): IterableIterator<Segment> {

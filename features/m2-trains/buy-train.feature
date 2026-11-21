@@ -1,4 +1,4 @@
-@m2 @wip
+@m2
 Feature: Buying trains
   As a railroad owner
   I want to buy a locomotive and cars

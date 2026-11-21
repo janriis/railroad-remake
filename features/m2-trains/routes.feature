@@ -1,4 +1,4 @@
-@m2 @wip
+@m2
 Feature: Train routes
   As a railroad owner
   I want to give a train a list of stops
@@ -46,3 +46,9 @@ Feature: Train routes
   Scenario: Consecutive stops must differ
     When I assign the train the route (2, 5), (2, 5)
     Then the command is rejected with "consecutive stops must differ"
+
+  Scenario: A train heads for the first stop of its new route
+    Given a train exists at the station at (8, 5)
+    When I assign the train the route (12, 5), (2, 5)
+    And 1 days pass
+    Then the train should be at (12, 5)
