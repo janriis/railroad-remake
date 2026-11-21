@@ -1,4 +1,4 @@
-@m1 @wip
+@m1
 Feature: Map generation
   As a player
   I want a new map for every seed

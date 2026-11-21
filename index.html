@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>RailroadSim</title>
+    <link rel="stylesheet" href="/src/ui/style.css" />
+  </head>
+  <body>
+    <canvas id="map" aria-label="Railroad map"></canvas>
+
+    <header id="hud">
+      <div class="cash-box">
+        <span class="label"
+          >Cash <span class="seed">· Seed <span id="seed">0</span></span></span
+        >
+        <span id="cash" class="cash">$0</span>
+      </div>
+      <div class="hud-right">
+        <button id="new-map" class="chip" type="button">New map</button>
+        <button id="help-btn" class="chip round" type="button" aria-label="Help" aria-expanded="false">
+          ?
+        </button>
+      </div>
+    </header>
+
+    <section id="help" class="card hidden" role="dialog" aria-label="How to play">
+      <h2>How to play</h2>
+      <ul>
+        <li><b>Pan:</b> drag the map. Pinch with two fingers (or scroll wheel) to zoom at any time.</li>
+        <li><b>Track:</b> tap a start tile, then an end tile. Check the price, then Confirm.</li>
+        <li><b>Bridge:</b> tap land, then land across 1 to 3 water tiles in a straight line.</li>
+        <li>
+          <b>Demolish:</b> tap two tiles on a straight line to tear up track there for a partial refund.
+        </li>
+      </ul>
+      <button id="help-close" class="btn primary" type="button">Got it</button>
+    </section>
+
+    <section id="newmap" class="card hidden" role="alertdialog" aria-label="New map">
+      <h2>Start a new map?</h2>
+      <p>Your current track and cash will be lost.</p>
+      <div class="btns">
+        <button id="newmap-cancel" class="btn" type="button">Keep playing</button>
+        <button id="newmap-ok" class="btn danger" type="button">New map</button>
+      </div>
+    </section>
+
+    <div id="bottom">
+      <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+      <div id="sheet" class="sheet hidden">
+        <div id="sheet-msg" class="sheet-msg"></div>
+        <div class="btns">
+          <button id="cancel" class="btn" type="button">Cancel</button>
+          <button id="confirm" class="btn primary" type="button">Confirm</button>
+        </div>
+      </div>
+      <nav id="toolbar" aria-label="Tools">
+        <button class="tool active" data-tool="pan" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2l3 3h-2v5h5V8l3 3-3 3v-2h-5v5h2l-3 3-3-3h2v-5H6v2l-3-3 3-3v2h5V5H9z" />
+          </svg>
+          <span>Pan</span>
+        </button>
+        <button class="tool" data-tool="track" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 3h2l5 18H10zM17 3h2l-5 18h-2zM6.5 8h11v2h-11zM8.5 15h7v2h-7z" />
+          </svg>
+          <span>Track</span>
+        </button>
+        <button class="tool" data-tool="bridge" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M2 8h20v2h-2v8h-2v-8h-3v8h-2v-8h-2v8h-2v-8H9v8H7v-8H4v8H2zM2 19h20v2H2z" />
+          </svg>
+          <span>Bridge</span>
+        </button>
+        <button class="tool" data-tool="demolish" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 14H7zM9 3h6l1 2h4v2H4V5h4z" /></svg>
+          <span>Demolish</span>
+        </button>
+      </nav>
+    </div>
+
+    <script type="module" src="/src/ui/main.ts"></script>
+  </body>
+</html>

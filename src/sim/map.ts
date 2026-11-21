@@ -26,6 +26,11 @@ export class GameMap {
     this.tiles[c.y * this.width + c.x] = terrain;
   }
 
+  /** Copy of all tiles, row by row. */
+  snapshot(): Terrain[] {
+    return [...this.tiles];
+  }
+
   private assertInBounds(c: Coord): void {
     if (!this.inBounds(c)) throw new Error(`(${c.x}, ${c.y}) is outside the map`);
   }

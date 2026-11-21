@@ -72,7 +72,6 @@ Feature: Building track
     When I build track along (1, 1), (3, 1)
     Then the command is rejected with "tiles are not adjacent"
 
-  @wip
   Scenario: Bridging a river
     Given the tile (4, 2) is water
     When I build a bridge from (3, 2) to (5, 2)

@@ -1,4 +1,4 @@
-@m1 @wip
+@m1
 Feature: Bridges
   As a railroad owner
   I want to carry track over water
@@ -46,6 +46,11 @@ Feature: Bridges
     And the tile (4, 2) is water
     When I build a bridge from (3, 2) to (5, 2)
     Then the command is rejected with "bridge must start and end on land"
+
+  Scenario: A bridge may only span water
+    Given the tile (4, 2) is water
+    When I build a bridge from (2, 2) to (5, 2)
+    Then the command is rejected with "a bridge may only span water"
 
   Scenario: A bridge needs funds for every segment
     Given the tile (4, 2) is water

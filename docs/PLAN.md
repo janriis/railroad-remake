@@ -70,7 +70,7 @@ npm test            # typecheck + unit + bdd
 | # | Milestone | Scope (each item gets its own .feature file) |
 |---|---|---|
 | M0 | Foundation | Repo, harness, CI, credit ledger, first walking skeleton (build track) |
-| M1 | Map & track | Terrain build costs, diagonals, rejections, bridges/tunnels, demolish track, map generator (seeded) |
+| M1 | Map & track | Terrain build costs, diagonals, rejections, bridges, demolish track, map generator (seeded). **Done**, plus an early touch UI (Canvas 2D, procedural art) published as a private claude.ai page for on-the-go testing |
 | M2 | Stations & trains | Station sizes + catchment radius, buy locomotive + cars, route with stops, A* pathing over track, movement over time, collisions/signals (simple block occupancy) |
 | M3 | Cargo & economy | Cities (passengers, mail), original industry chains (e.g. timber→sawmill→furniture), supply/demand, payment by distance and transit time, running and maintenance costs, monthly/yearly ledger |
 | M4 | Rendering & UI | PixiJS map, camera pan/zoom, build tools, train/station panels, Higgsfield assets in place, Playwright smoke |

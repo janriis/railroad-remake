@@ -10,6 +10,8 @@ export class SimWorld extends World {
   private _game: Game | undefined;
   lastResult: CommandResult | undefined;
   cashBeforeLastCommand = 0;
+  /** Games produced by map-generation steps, in order. */
+  readonly generated: Game[] = [];
 
   constructor(options: IWorldOptions) {
     super(options);

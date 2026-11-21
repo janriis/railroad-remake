@@ -1,8 +1,14 @@
 import { coordKey, type Coord } from './types';
 
+export interface Segment {
+  readonly a: Coord;
+  readonly b: Coord;
+  readonly bridge: boolean;
+}
+
 /** Undirected graph of track segments between 8-neighbour tiles. */
 export class TrackNetwork {
-  private readonly segments = new Set<string>();
+  private readonly segs = new Map<string, Segment>();
 
   static segmentKey(a: Coord, b: Coord): string {
     const [ka, kb] = [coordKey(a), coordKey(b)];
@@ -10,15 +16,27 @@ export class TrackNetwork {
   }
 
   has(a: Coord, b: Coord): boolean {
-    return this.segments.has(TrackNetwork.segmentKey(a, b));
+    return this.segs.has(TrackNetwork.segmentKey(a, b));
   }
 
-  add(a: Coord, b: Coord): void {
-    this.segments.add(TrackNetwork.segmentKey(a, b));
+  get(a: Coord, b: Coord): Segment | undefined {
+    return this.segs.get(TrackNetwork.segmentKey(a, b));
+  }
+
+  add(a: Coord, b: Coord, bridge = false): void {
+    this.segs.set(TrackNetwork.segmentKey(a, b), { a, b, bridge });
+  }
+
+  remove(a: Coord, b: Coord): void {
+    this.segs.delete(TrackNetwork.segmentKey(a, b));
+  }
+
+  segments(): IterableIterator<Segment> {
+    return this.segs.values();
   }
 
   get segmentCount(): number {
-    return this.segments.size;
+    return this.segs.size;
   }
 }
 

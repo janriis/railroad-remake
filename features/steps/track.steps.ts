@@ -36,3 +36,25 @@ Then('the track network has {int} segment(s)', function (this: SimWorld, n: numb
 Then('there is track between {coord} and {coord}', function (this: SimWorld, a: Coord, b: Coord) {
   assert.ok(this.game.track.has(a, b));
 });
+
+// --- Bridges -------------------------------------------------------------
+
+// Fixture: free.
+Given('a bridge exists from {coord} to {coord}', function (this: SimWorld, from: Coord, to: Coord) {
+  const path = line(from, to);
+  for (let i = 1; i < path.length; i++) this.game.track.add(path[i - 1]!, path[i]!, true);
+});
+
+When('I build a bridge from {coord} to {coord}', function (this: SimWorld, from: Coord, to: Coord) {
+  this.run((g) => g.buildBridge(from, to));
+});
+
+// --- Demolishing ---------------------------------------------------------
+
+When('I demolish track from {coord} to {coord}', function (this: SimWorld, from: Coord, to: Coord) {
+  this.run((g) => g.demolishTrack(from, to));
+});
+
+Then('the company should have received a refund of {money}', function (this: SimWorld, amount: number) {
+  assert.equal(this.game.cash - this.cashBeforeLastCommand, amount);
+});
