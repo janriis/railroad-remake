@@ -1,4 +1,4 @@
-@m3 @wip
+@m3
 Feature: Cargo delivery revenue
   As a railroad owner
   I want to be paid for cargo I deliver
@@ -62,3 +62,14 @@ Feature: Cargo delivery revenue
   Scenario: Nothing is paid when cargo is delivered to its origin
     When 50 passengers are delivered over 0 tiles in 1 days
     Then the company should be paid $0
+
+  Scenario: A train carrying passengers between two towns gets paid for both directions
+    Given existing track from (2, 5) to (14, 5)
+    And the town "Alder" with 1,000 inhabitants exists at (4, 5)
+    And the town "Birch" with 1,000 inhabitants exists at (12, 5)
+    And a medium station exists at (4, 5) covering "Alder"
+    And a medium station exists at (12, 5) covering "Birch"
+    And a train with 3 passenger cars exists at the station at (4, 5) with the route (4, 5), (12, 5)
+    When 40 days pass
+    Then the ledger for 1850 should show $10,560 in cargo income
+    And the station at (4, 5) should have 0 passengers waiting

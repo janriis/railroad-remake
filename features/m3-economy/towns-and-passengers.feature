@@ -1,4 +1,4 @@
-@m3 @wip
+@m3
 Feature: Towns and passengers
   As a railroad owner
   I want towns to produce passengers and mail

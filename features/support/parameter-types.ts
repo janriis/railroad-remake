@@ -1,4 +1,5 @@
 import { defineParameterType } from '@cucumber/cucumber';
+import { CARGO_TYPES, INDUSTRY_KINDS, type Cargo, type IndustryKind } from '../../src/sim/config';
 import { TERRAINS, type Coord, type Terrain } from '../../src/sim/types';
 
 /** (3, 4) */
@@ -20,4 +21,25 @@ defineParameterType({
   name: 'terrain',
   regexp: new RegExp(TERRAINS.join('|')),
   transformer: (s: string): Terrain => s as Terrain,
+});
+
+/** 4,000 or 500 — a plain count that may use thousands separators. */
+defineParameterType({
+  name: 'count',
+  regexp: /\d{1,3}(?:,\d{3})+|\d+/,
+  transformer: (s: string): number => Number(s.replaceAll(',', '')),
+});
+
+/** timber camp | sawmill | furniture works | grain farm | flour mill | bakery */
+defineParameterType({
+  name: 'industry',
+  regexp: new RegExp(INDUSTRY_KINDS.map((k) => k.replace('-', ' ')).join('|')),
+  transformer: (s: string): IndustryKind => s.replace(' ', '-') as IndustryKind,
+});
+
+/** passengers | mail | mailbags | timber | … */
+defineParameterType({
+  name: 'cargo',
+  regexp: new RegExp(['mailbags', ...CARGO_TYPES].join('|')),
+  transformer: (s: string): Cargo => (s === 'mailbags' ? 'mail' : (s as Cargo)),
 });

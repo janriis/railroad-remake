@@ -1,4 +1,4 @@
-@m3 @wip
+@m3
 Feature: Industries and production chains
   As a railroad owner
   I want industries that make goods from other goods
@@ -47,7 +47,7 @@ Feature: Industries and production chains
     And a sawmill exists at (10, 3)
     And a small station exists at (3, 3)
     And a small station exists at (10, 3)
-    And a train exists at the station at (3, 3) with the route (3, 3), (10, 3)
+    And a train with 2 freight cars exists at the station at (3, 3) with the route (3, 3), (10, 3)
     When 2 months pass
     Then the sawmill at (10, 3) should have received timber
     And the sawmill at (10, 3) should have lumber waiting

@@ -1,5 +1,6 @@
 import { OPPOSING_TRAFFIC_PENALTY_TILES, TICKS_PER_DAY, TILE_UNITS } from './config';
 import { findTrackPath, stepUnits } from './pathfinding';
+import type { Lot } from './cargo';
 import type { TrackNetwork } from './track';
 import { coordKey, sameCoord, type Coord } from './types';
 
@@ -39,6 +40,8 @@ export interface Train {
   deadlocked: boolean;
   /** Number of stops reached. */
   journeys: number;
+  /** Cargo on board. */
+  cargo: Lot[];
   readonly waitedFor: Set<number>;
 }
 
@@ -48,6 +51,8 @@ export interface MovementContext {
   readonly track: TrackNetwork;
   readonly trains: readonly Train[];
   isStation(c: Coord): boolean;
+  /** Called when a train reaches stop `stopIndex` of its route: unload, change cars, load. */
+  serviceStop(t: Train, stopIndex: number): void;
 }
 
 /** One tick of train movement, in train id order (deterministic). */
@@ -83,11 +88,7 @@ function stepTrain(ctx: MovementContext, t: Train): void {
 
   if (t.route.length >= 2 && sameCoord(t.at, t.route[t.target]!)) {
     t.journeys++;
-    const order = t.stopOrders[t.target];
-    if (order) {
-      t.passengerCars = order.passengerCars;
-      t.freightCars = order.freightCars;
-    }
+    ctx.serviceStop(t, t.target);
     t.target = (t.target + 1) % t.route.length;
     t.plan = [];
     t.status = 'at-stop'; // dwell for the rest of this tick

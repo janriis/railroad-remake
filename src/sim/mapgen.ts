@@ -1,15 +1,34 @@
-import { MAPGEN } from './config';
+import { INDUSTRY, INDUSTRY_KINDS, MAPGEN, TOWN_POPULATION, type IndustryKind } from './config';
 import { GameMap } from './map';
 import { Rng } from './rng';
 import type { Coord } from './types';
 
 export interface Town extends Coord {
   readonly name: string;
+  population: number;
+  /** Passengers produced for the railroad and carried away so far this year (drives growth). */
+  generatedThisYear: number;
+  carriedThisYear: number;
+}
+
+export const newTown = (name: string, at: Coord, population: number): Town => ({
+  x: at.x,
+  y: at.y,
+  name,
+  population,
+  generatedThisYear: 0,
+  carriedThisYear: 0,
+});
+
+export interface IndustrySite {
+  readonly kind: IndustryKind;
+  readonly at: Coord;
 }
 
 export interface GeneratedWorld {
   readonly map: GameMap;
-  readonly towns: readonly Town[];
+  readonly towns: Town[];
+  readonly industries: IndustrySite[];
 }
 
 export interface MapGenOptions {
@@ -46,7 +65,40 @@ export function generateWorld(opts: MapGenOptions): GeneratedWorld {
   }
 
   const townCount = opts.towns ?? Math.max(2, Math.round((width * height) / MAPGEN.tilesPerTown));
-  return { map, towns: placeTowns(rng, map, townCount) };
+  const towns = placeTowns(rng, map, townCount);
+  // Drawn after placement so that town positions don't depend on these rolls.
+  for (const t of towns) t.population = rng.int(TOWN_POPULATION.min / 10, TOWN_POPULATION.max / 10) * 10;
+  return { map, towns, industries: placeIndustries(rng, map, towns) };
+}
+
+/** Each industry kind appears once per MAPGEN.tilesPerIndustry tiles (at least once). */
+function placeIndustries(rng: Rng, map: GameMap, towns: readonly Town[]): IndustrySite[] {
+  const perKind = Math.max(1, Math.round((map.width * map.height) / MAPGEN.tilesPerIndustry));
+  const m = MAPGEN.townEdgeMargin;
+  const candidates: Coord[] = [];
+  for (let y = m; y < map.height - m; y++) for (let x = m; x < map.width - m; x++) candidates.push({ x, y });
+  shuffle(rng, candidates);
+  const taken: Coord[] = [...towns];
+  const sites: IndustrySite[] = [];
+  for (const kind of INDUSTRY_KINDS) {
+    let placed = 0;
+    for (const c of candidates) {
+      if (placed === perKind) break;
+      if (map.terrainAt(c) !== INDUSTRY[kind].terrain) continue;
+      if (taken.some((t) => Math.max(Math.abs(t.x - c.x), Math.abs(t.y - c.y)) < MAPGEN.minIndustryDistance)) continue;
+      sites.push({ kind, at: c });
+      taken.push(c);
+      placed++;
+    }
+  }
+  return sites;
+}
+
+function shuffle<T>(rng: Rng, items: T[]): void {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = rng.int(0, i);
+    [items[i], items[j]] = [items[j]!, items[i]!];
+  }
 }
 
 function placeTowns(rng: Rng, map: GameMap, count: number): Town[] {
@@ -56,18 +108,14 @@ function placeTowns(rng: Rng, map: GameMap, count: number): Town[] {
     for (let x = m; x < map.width - m; x++)
       if (map.terrainAt({ x, y }) === 'plains') candidates.push({ x, y });
 
-  // Fisher–Yates with the seeded RNG.
-  for (let i = candidates.length - 1; i > 0; i--) {
-    const j = rng.int(0, i);
-    [candidates[i], candidates[j]] = [candidates[j]!, candidates[i]!];
-  }
+  shuffle(rng, candidates);
 
   const names = townNames(rng, count);
   const towns: Town[] = [];
   for (const c of candidates) {
     if (towns.length === count) break;
     if (towns.every((t) => Math.hypot(t.x - c.x, t.y - c.y) >= MAPGEN.minTownDistance))
-      towns.push({ ...c, name: names[towns.length]! });
+      towns.push(newTown(names[towns.length]!, c, 0));
   }
   return towns;
 }

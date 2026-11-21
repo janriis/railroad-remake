@@ -10,7 +10,16 @@ import {
   MAX_BRIDGE_WATER_TILES,
   MAX_CARS,
   PASSENGER_CAR_COST,
+  CARGO,
   CAR_RUNNING_COST,
+  FREIGHT_CAR_CAPACITY,
+  INDUSTRY,
+  INHABITANTS_PER_MAILBAG,
+  INHABITANTS_PER_PASSENGER,
+  PASSENGER_CAR_CAPACITY,
+  TOWN_GROWTH_RATE,
+  type Cargo,
+  type IndustryKind,
   LOCOMOTIVE_RUNNING_COST,
   STATION,
   TICKS_PER_DAY,
@@ -20,6 +29,16 @@ import {
   type StationSize,
 } from './config';
 import {
+  TOWN_WEIGHT_TOTAL,
+  deliveryPayment,
+  manhattan,
+  townTiles,
+  type Delivery,
+  type Industry,
+  type Lot,
+  type WaitingLot,
+} from './cargo';
+import {
   TICKS_PER_MONTH,
   dateAt,
   emptyLedgerYear,
@@ -28,7 +47,7 @@ import {
   type LedgerYear,
 } from './economy';
 import { GameMap } from './map';
-import { generateWorld, type Town } from './mapgen';
+import { generateWorld, newTown, type Town } from './mapgen';
 import { findTrackPath } from './pathfinding';
 import { planTrack, priceRoute, type PlanOptions, type PlanResult, type TrackPlan } from './planner';
 import { Rng } from './rng';
@@ -57,6 +76,8 @@ export interface Station {
   readonly at: Coord;
   readonly size: StationSize;
   readonly radius: number;
+  /** Town cargo (passengers, mail) waiting to be picked up. */
+  readonly waiting: WaitingLot[];
 }
 
 export interface TrainOrder {
@@ -82,7 +103,11 @@ export interface SaveData {
     route: Coord[];
     stopOrders?: (CarCounts | null)[];
     target: number;
+    cargo?: Lot[];
   }[];
+  readonly towns?: { population: number; generatedThisYear: number; carriedThisYear: number }[];
+  readonly stationWaiting?: WaitingLot[][];
+  readonly industries?: Omit<Industry, 'id'>[];
 }
 
 const fmt = (c: Coord) => `(${c.x}, ${c.y})`;
@@ -102,11 +127,12 @@ export class Game {
   time = 0;
   /** Yearly accounts, keyed by year. */
   readonly ledger = new Map<number, LedgerYear>();
+  readonly industries: Industry[] = [];
   private nextId = 1;
 
   private constructor(
     readonly map: GameMap,
-    readonly towns: readonly Town[],
+    readonly towns: Town[],
     seed: number,
     startingCash: number,
     /** How the map was generated; null for hand-made test maps. */
@@ -124,8 +150,10 @@ export class Game {
 
   /** A generated map with terrain and towns. */
   static generate(opts: GenerateOptions): Game {
-    const { map, towns } = generateWorld(opts);
-    return new Game(map, towns, opts.seed, opts.startingCash ?? DEFAULT_STARTING_CASH, { ...opts });
+    const { map, towns, industries } = generateWorld(opts);
+    const game = new Game(map, towns, opts.seed, opts.startingCash ?? DEFAULT_STARTING_CASH, { ...opts });
+    for (const i of industries) game.addIndustry(i.kind, i.at);
+    return game;
   }
 
   // --- Track -------------------------------------------------------------------
@@ -280,7 +308,7 @@ export class Game {
 
   /** Loading/fixture API: place a station without checks or cost. */
   addStation(size: StationSize, at: Coord): Station {
-    const station = { id: this.nextId++, at, size, radius: STATION[size].radius };
+    const station: Station = { id: this.nextId++, at, size, radius: STATION[size].radius, waiting: [] };
     this.stations.set(coordKey(at), station);
     return station;
   }
@@ -327,6 +355,7 @@ export class Game {
       waitingTicks: 0,
       deadlocked: false,
       journeys: 0,
+      cargo: [],
       waitedFor: new Set(),
     };
     this.trains.push(train);
@@ -389,12 +418,176 @@ export class Game {
     if (cost > this.cash) return fail('insufficient funds');
     train.passengerCars = cars.passengerCars;
     train.freightCars = cars.freightCars;
+    trimToCapacity(train);
     const owned = cars.passengerCars + cars.freightCars;
     train.stopOrders = train.stopOrders.map((o) =>
       o && o.passengerCars + o.freightCars === owned ? o : null,
     );
     this.spend(cost, 'rollingStock');
     return ok(cost);
+  }
+
+  // --- Towns, industries and cargo ----------------------------------------------
+
+  /** Loading/fixture API: found a town. */
+  addTown(name: string, at: Coord, population: number): Town {
+    const town = newTown(name, at, population);
+    this.towns.push(town);
+    return town;
+  }
+
+  town(name: string): Town | undefined {
+    return this.towns.find((t) => t.name === name);
+  }
+
+  /** Loading/fixture API: place an industry. */
+  addIndustry(kind: IndustryKind, at: Coord): Industry {
+    const industry: Industry = { id: this.nextId++, kind, at, stock: 0, input: 0, received: 0 };
+    this.industries.push(industry);
+    return industry;
+  }
+
+  industryAt(c: Coord): Industry | undefined {
+    return this.industries.find((i) => i.at.x === c.x && i.at.y === c.y);
+  }
+
+  /**
+   * How much of a town each station serves, as weights out of TOWN_WEIGHT_TOTAL. A town
+   * tile inside several catchments counts for the station built first.
+   */
+  townCoverage(town: Town): Map<Station, number> {
+    const shares = new Map<Station, number>();
+    for (const tile of townTiles(town)) {
+      for (const station of this.stations.values()) {
+        if (!this.inCatchment(station, tile.at)) continue;
+        shares.set(station, (shares.get(station) ?? 0) + tile.weight);
+        break;
+      }
+    }
+    return shares;
+  }
+
+  /** Industries inside a station's catchment, in placement order. */
+  industriesServedBy(station: Station): Industry[] {
+    return this.industries.filter((i) => this.inCatchment(station, i.at));
+  }
+
+  /** Units of a cargo ready for pickup at a station: town cargo there plus covered industries' stock. */
+  waitingAt(station: Station, cargo: Cargo): number {
+    const town = station.waiting.reduce((n, l) => n + (l.cargo === cargo ? l.units : 0), 0);
+    const industry = this.industriesServedBy(station).reduce(
+      (n, i) => n + (INDUSTRY[i.kind].output === cargo ? i.stock : 0),
+      0,
+    );
+    return town + industry;
+  }
+
+  /** Passengers from this town waiting at any station. */
+  passengersWaitingFrom(townName: string): number {
+    let n = 0;
+    for (const s of this.stations.values())
+      for (const l of s.waiting) if (l.source === townName && l.cargo === 'passengers') n += l.units;
+    return n;
+  }
+
+  accepts(station: Station, cargo: Cargo): boolean {
+    if (cargo === 'passengers' || cargo === 'mail')
+      return this.towns.some((t) => townTiles(t).some((tile) => this.inCatchment(station, tile.at)));
+    return this.industriesServedBy(station).some((i) => INDUSTRY[i.kind].input === cargo);
+  }
+
+  /** Get paid for a finished delivery. Trains call this when they unload; it never fails. */
+  settleDelivery(delivery: Delivery): CommandResult {
+    const payment = deliveryPayment(delivery);
+    this.spend(-payment, 'cargoIncome');
+    return ok(-payment);
+  }
+
+  /** At a stop: unload what this station takes, apply the stop's car order, then load. */
+  serviceStop(train: Train, stopIndex: number): void {
+    const station = this.stationAt(train.at);
+    if (station) this.unload(train, station);
+    const order = train.stopOrders[stopIndex];
+    if (order) {
+      train.passengerCars = order.passengerCars;
+      train.freightCars = order.freightCars;
+      trimToCapacity(train);
+    }
+    if (station) this.load(train, station);
+  }
+
+  private unload(train: Train, station: Station): void {
+    const days = (lot: Lot) => Math.floor((this.time - lot.loadedAt) / TICKS_PER_DAY);
+    train.cargo = train.cargo.filter((lot) => {
+      const distance = manhattan(lot.from, station.at);
+      if (distance === 0 || !this.accepts(station, lot.cargo)) return true;
+      this.settleDelivery({ cargo: lot.cargo, units: lot.units, distance, days: days(lot) });
+      const consumer = this.industriesServedBy(station).find((i) => INDUSTRY[i.kind].input === lot.cargo);
+      if (consumer) {
+        consumer.input += lot.units;
+        consumer.received += lot.units;
+      }
+      return false;
+    });
+  }
+
+  private load(train: Train, station: Station): void {
+    const room = { passenger: spareRoom(train, 'passenger'), freight: spareRoom(train, 'freight') };
+    const take = (cargo: Cargo, available: number): number => {
+      const kind = CARGO[cargo].car;
+      const n = Math.min(available, room[kind]);
+      if (n <= 0) return 0;
+      room[kind] -= n;
+      const lot = train.cargo.find((l) => l.cargo === cargo && sameAt(l.from, station.at) && l.loadedAt === this.time);
+      if (lot) lot.units += n;
+      else train.cargo.push({ cargo, units: n, from: { ...station.at }, loadedAt: this.time });
+      return n;
+    };
+    for (const w of station.waiting) {
+      const n = take(w.cargo, w.units);
+      w.units -= n;
+      const town = this.town(w.source);
+      if (town && w.cargo === 'passengers') town.carriedThisYear += n;
+    }
+    station.waiting.splice(0, station.waiting.length, ...station.waiting.filter((w) => w.units > 0));
+    for (const industry of this.industriesServedBy(station))
+      industry.stock -= take(INDUSTRY[industry.kind].output, industry.stock);
+  }
+
+  private produceTownCargo(): void {
+    for (const town of this.towns) {
+      for (const [station, weight] of this.townCoverage(town)) {
+        const scale = TOWN_WEIGHT_TOTAL;
+        const passengers = Math.floor((town.population * weight) / (INHABITANTS_PER_PASSENGER * scale));
+        const mail = Math.floor((town.population * weight) / (INHABITANTS_PER_MAILBAG * scale));
+        addWaiting(station, 'passengers', town.name, passengers);
+        addWaiting(station, 'mail', town.name, mail);
+        town.generatedThisYear += passengers;
+      }
+    }
+  }
+
+  private runIndustries(): void {
+    for (const industry of this.industries) {
+      const spec = INDUSTRY[industry.kind];
+      if (spec.input === undefined) {
+        industry.stock += spec.perMonth;
+      } else {
+        const batches = Math.floor(industry.input / spec.in);
+        industry.input -= batches * spec.in;
+        industry.stock += batches * spec.out;
+      }
+    }
+  }
+
+  /** Year end: towns that saw at least half their passengers carried away grow. */
+  private growTowns(): void {
+    for (const town of this.towns) {
+      if (town.generatedThisYear > 0 && town.carriedThisYear * 2 >= town.generatedThisYear)
+        town.population = Math.round(town.population * (1 + TOWN_GROWTH_RATE));
+      town.generatedThisYear = 0;
+      town.carriedThisYear = 0;
+    }
   }
 
   // --- Time --------------------------------------------------------------------
@@ -420,7 +613,11 @@ export class Game {
 
   /** Runs on the first hour of a new month and bills the month that just ended. Cash may go negative. */
   private endOfMonth(): void {
-    const year = dateAt(this.time - 1).year;
+    const ended = dateAt(this.time - 1);
+    this.produceTownCargo();
+    this.runIndustries();
+    if (ended.month === 11) this.growTowns();
+    const year = ended.year;
     const costs = this.monthlyRunningCosts();
     this.spend(costs.trackMaintenance, 'trackMaintenance', year);
     this.spend(costs.trainRunning, 'trainRunning', year);
@@ -465,7 +662,15 @@ export class Game {
         route: t.route,
         stopOrders: t.stopOrders,
         target: t.target,
+        cargo: t.cargo,
       })),
+      towns: this.towns.map((t) => ({
+        population: t.population,
+        generatedThisYear: t.generatedThisYear,
+        carriedThisYear: t.carriedThisYear,
+      })),
+      stationWaiting: [...this.stations.values()].map((s) => s.waiting),
+      industries: this.industries.map((i) => ({ kind: i.kind, at: i.at, stock: i.stock, input: i.input, received: i.received })),
     };
   }
 
@@ -476,13 +681,52 @@ export class Game {
     game.time = save.time;
     for (const { year, ...page } of save.ledger ?? []) game.ledger.set(year, { ...emptyLedgerYear(), ...page });
     for (const s of save.segments) game.track.add(s.a, s.b, s.bridge);
-    for (const s of save.stations) game.addStation(s.size, s.at);
+    save.towns?.forEach((t, i) => Object.assign(game.towns[i]!, t));
+    if (save.industries) {
+      game.industries.length = 0;
+      for (const i of save.industries) Object.assign(game.addIndustry(i.kind, i.at), i);
+    }
+    save.stations.forEach((s, i) => game.addStation(s.size, s.at).waiting.push(...(save.stationWaiting?.[i] ?? [])));
     for (const t of save.trains) {
       const train = game.addTrain(t);
       train.route = t.route;
       train.stopOrders = t.stopOrders ?? t.route.map(() => null);
       train.target = t.target;
+      train.cargo = t.cargo ?? [];
     }
     return game;
   }
+}
+
+const sameAt = (a: Coord, b: Coord): boolean => a.x === b.x && a.y === b.y;
+
+function addWaiting(station: Station, cargo: Cargo, source: string, units: number): void {
+  if (units <= 0) return;
+  const lot = station.waiting.find((w) => w.cargo === cargo && w.source === source);
+  if (lot) lot.units += units;
+  else station.waiting.push({ cargo, source, units });
+}
+
+function capacity(train: Train, kind: 'passenger' | 'freight'): number {
+  return kind === 'passenger' ? train.passengerCars * PASSENGER_CAR_CAPACITY : train.freightCars * FREIGHT_CAR_CAPACITY;
+}
+
+function spareRoom(train: Train, kind: 'passenger' | 'freight'): number {
+  const used = train.cargo.reduce((n, l) => n + (CARGO[l.cargo].car === kind ? l.units : 0), 0);
+  return capacity(train, kind) - used;
+}
+
+/** After cars are removed, cargo that no longer fits is lost (newest first). */
+function trimToCapacity(train: Train): void {
+  for (const kind of ['passenger', 'freight'] as const) {
+    let over = -spareRoom(train, kind);
+    for (let i = train.cargo.length - 1; i >= 0 && over > 0; i--) {
+      const lot = train.cargo[i]!;
+      if (CARGO[lot.cargo].car !== kind) continue;
+      const cut = Math.min(lot.units, over);
+      lot.units -= cut;
+      over -= cut;
+    }
+  }
+  train.cargo = train.cargo.filter((l) => l.units > 0);
 }

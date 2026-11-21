@@ -11,7 +11,6 @@ Feature: Yearly ledger
     And the company has $1,000,000 in cash
     And the calendar starts on 1 January 1850
 
-  @wip
   Scenario: Delivery income is recorded in the ledger
     When 50 passengers are delivered over 10 tiles in 10 days
     Then the ledger for 1850 should show $2,500 in cargo income
@@ -25,7 +24,6 @@ Feature: Yearly ledger
     When 12 months pass
     Then the ledger for 1850 should show $4,800 in running costs
 
-  @wip
   Scenario: Profit is income minus expenses
     Given existing track from (2, 2) to (6, 2)
     When 50 passengers are delivered over 10 tiles in 10 days

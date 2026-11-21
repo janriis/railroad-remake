@@ -33,6 +33,10 @@ export const MAPGEN = {
   townEdgeMargin: 2,
   /** One town per this many tiles, at least 2. */
   tilesPerTown: 1024,
+  /** One industry of each kind per this many tiles, at least 1. */
+  tilesPerIndustry: 2048,
+  /** Industries keep this Chebyshev distance from towns and each other. */
+  minIndustryDistance: 4,
 } as const;
 
 // --- M2: stations & trains ----------------------------------------------------
@@ -68,3 +72,60 @@ export const LOCOMOTIVE_RUNNING_COST = 2_000;
 export const CAR_RUNNING_COST = 200;
 /** Routing penalty (in tiles) for each segment another train plans to run the opposite way. */
 export const OPPOSING_TRAFFIC_PENALTY_TILES = 4;
+
+// --- M3: cargo ------------------------------------------------------------------
+
+export const CARGO_TYPES = ['passengers', 'mail', 'timber', 'lumber', 'furniture', 'grain', 'flour', 'loaves'] as const;
+export type Cargo = (typeof CARGO_TYPES)[number];
+
+/** Payment per unit per tile, and which kind of car carries it. */
+export const CARGO: Readonly<Record<Cargo, { rate: number; car: 'passenger' | 'freight' }>> = {
+  passengers: { rate: 5, car: 'passenger' },
+  mail: { rate: 8, car: 'passenger' },
+  timber: { rate: 3, car: 'freight' },
+  lumber: { rate: 6, car: 'freight' },
+  furniture: { rate: 12, car: 'freight' },
+  grain: { rate: 3, car: 'freight' },
+  flour: { rate: 5, car: 'freight' },
+  loaves: { rate: 9, car: 'freight' },
+};
+
+/** Units one car holds (passengers and mail share passenger cars). */
+export const PASSENGER_CAR_CAPACITY = 40;
+export const FREIGHT_CAR_CAPACITY = 20;
+
+/** Full pay up to this many days in transit, then the time factor drops. */
+export const TRANSIT_GRACE_DAYS = 20;
+export const TRANSIT_DECAY_PERCENT_PER_DAY = 2;
+export const MIN_TIME_FACTOR_PERCENT = 50;
+
+/** Per month: one passenger per this many inhabitants, one mailbag per this many. */
+export const INHABITANTS_PER_PASSENGER = 10;
+export const INHABITANTS_PER_MAILBAG = 50;
+/** A town spans this Chebyshev radius around its centre; the inner ring holds half the people. */
+export const TOWN_RADIUS = 2;
+/** Yearly growth when at least half the passengers were carried away. */
+export const TOWN_GROWTH_RATE = 0.1;
+export const TOWN_POPULATION = { min: 400, max: 3_000 } as const;
+
+export const INDUSTRY_KINDS = ['timber-camp', 'sawmill', 'furniture-works', 'grain-farm', 'flour-mill', 'bakery'] as const;
+export type IndustryKind = (typeof INDUSTRY_KINDS)[number];
+
+/**
+ * Primary industries make `perMonth` of their output. Processors turn every `in` units
+ * received into `out` units at month end; leftovers wait for next month.
+ */
+export const INDUSTRY: Readonly<
+  Record<
+    IndustryKind,
+    | { output: Cargo; perMonth: number; input?: undefined; terrain: 'forest' | 'plains' }
+    | { output: Cargo; input: Cargo; in: number; out: number; terrain: 'plains' }
+  >
+> = {
+  'timber-camp': { output: 'timber', perMonth: 40, terrain: 'forest' },
+  sawmill: { input: 'timber', in: 2, output: 'lumber', out: 1, terrain: 'plains' },
+  'furniture-works': { input: 'lumber', in: 2, output: 'furniture', out: 1, terrain: 'plains' },
+  'grain-farm': { output: 'grain', perMonth: 60, terrain: 'plains' },
+  'flour-mill': { input: 'grain', in: 3, output: 'flour', out: 2, terrain: 'plains' },
+  bakery: { input: 'flour', in: 1, output: 'loaves', out: 2, terrain: 'plains' },
+};
