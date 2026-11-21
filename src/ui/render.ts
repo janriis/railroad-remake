@@ -1,4 +1,7 @@
+import type { Station } from '../sim/game';
 import type { GameMap } from '../sim/map';
+import { stepUnits } from '../sim/pathfinding';
+import type { Train } from '../sim/trains';
 import type { Segment } from '../sim/track';
 import type { Coord, Terrain } from '../sim/types';
 
@@ -272,4 +275,187 @@ export function drawLabel(ctx: CanvasRenderingContext2D, text: string, sx: numbe
   ctx.strokeText(text, sx, sy);
   ctx.fillStyle = '#1c2630';
   ctx.fillText(text, sx, sy);
+}
+
+// ---------- stations ----------
+
+const STATION_ROOF: Record<string, string> = { small: '#d1495b', medium: '#edae49', large: '#00798c' };
+const STATION_SCALE: Record<string, number> = { small: 0.4, medium: 0.54, large: 0.7 };
+
+/** Draws a station platform and building on its track tile (tile units). */
+export function drawStation(ctx: CanvasRenderingContext2D, st: Station): void {
+  const { x, y } = st.at;
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(x + 0.1, y + 0.13, 0.8, 0.8);
+  ctx.fillStyle = '#d6cfc0';
+  ctx.strokeStyle = '#5f5849';
+  ctx.lineWidth = 0.035;
+  ctx.beginPath();
+  ctx.rect(x + 0.08, y + 0.08, 0.84, 0.84);
+  ctx.fill();
+  ctx.stroke();
+  const w = STATION_SCALE[st.size]!;
+  const h = w * 0.62;
+  const bx = x + 0.5 - w / 2;
+  const by = y + 0.5 - h / 2;
+  ctx.fillStyle = '#f4efe3';
+  ctx.fillRect(bx, by, w, h);
+  ctx.fillStyle = STATION_ROOF[st.size]!;
+  ctx.fillRect(bx - 0.03, by - 0.03, w + 0.06, h * 0.55);
+  ctx.strokeStyle = '#3b352b';
+  ctx.lineWidth = 0.03;
+  ctx.strokeRect(bx - 0.03, by - 0.03, w + 0.06, h + 0.03);
+  const pips = st.size === 'small' ? 1 : st.size === 'medium' ? 2 : 3;
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < pips; i++) {
+    ctx.beginPath();
+    ctx.arc(x + 0.5 + (i - (pips - 1) / 2) * 0.14, by + h * 0.8, 0.045, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/** Draws the catchment square of a station (tile units). */
+export function drawCatchment(
+  ctx: CanvasRenderingContext2D,
+  at: Coord,
+  radius: number,
+  strong = false,
+): void {
+  ctx.fillStyle = strong ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+  ctx.lineWidth = 0.05;
+  ctx.setLineDash([0.18, 0.14]);
+  ctx.beginPath();
+  ctx.rect(at.x - radius, at.y - radius, radius * 2 + 1, radius * 2 + 1);
+  ctx.fill();
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// ---------- trains ----------
+
+export const TRAIN_COLOURS = ['#d1495b', '#2e86ab', '#f6aa1c', '#6a994e', '#9b5de5', '#ef6f2e'];
+
+export interface Pose {
+  x: number;
+  y: number;
+  /** Direction of travel in radians. */
+  a: number;
+  kind: 'loco' | 'passenger' | 'freight';
+}
+
+const CAR_GAP = 0.44;
+
+/**
+ * Where a train's locomotive and cars are. `extra` adds distance units of smooth motion
+ * between ticks. Cars trail along the last known tiles, then straight back.
+ */
+export function trainPoses(t: Train, extra = 0): Pose[] {
+  let head = { x: t.at.x + 0.5, y: t.at.y + 0.5 };
+  let fx = 1;
+  let fy = 0;
+  const pts: { x: number; y: number }[] = [];
+  const centre = (c: Coord) => ({ x: c.x + 0.5, y: c.y + 0.5 });
+  if (t.next) {
+    const f = Math.min(1, (t.progress + extra) / stepUnits(t.at, t.next));
+    const n = centre(t.next);
+    head = { x: head.x + (n.x - head.x) * f, y: head.y + (n.y - head.y) * f };
+    fx = n.x - (t.at.x + 0.5);
+    fy = n.y - (t.at.y + 0.5);
+    pts.push(head, centre(t.at));
+  } else {
+    if (t.prev) {
+      fx = t.at.x - t.prev.x;
+      fy = t.at.y - t.prev.y;
+    }
+    pts.push(head);
+  }
+  if (t.prev) pts.push(centre(t.prev));
+  const fl = Math.hypot(fx, fy) || 1;
+  const dir = { x: fx / fl, y: fy / fl };
+  const tail = pts[pts.length - 1]!;
+  const before = pts.length > 1 ? pts[pts.length - 2]! : null;
+  let bx = before ? tail.x - before.x : -dir.x;
+  let by = before ? tail.y - before.y : -dir.y;
+  const bl = Math.hypot(bx, by);
+  if (bl < 1e-6) {
+    bx = -dir.x;
+    by = -dir.y;
+  } else {
+    bx /= bl;
+    by /= bl;
+  }
+  pts.push({ x: tail.x + bx * 20, y: tail.y + by * 20 });
+
+  const at = (d: number): { x: number; y: number } => {
+    let left = Math.max(0, d);
+    for (let i = 1; i < pts.length; i++) {
+      const p = pts[i - 1]!;
+      const q = pts[i]!;
+      const len = Math.hypot(q.x - p.x, q.y - p.y);
+      if (left <= len || i === pts.length - 1) {
+        const k = len ? left / len : 0;
+        return { x: p.x + (q.x - p.x) * k, y: p.y + (q.y - p.y) * k };
+      }
+      left -= len;
+    }
+    return head;
+  };
+  const poseAt = (d: number, kind: Pose['kind']): Pose => {
+    const p = at(d);
+    const front = at(d - 0.1);
+    const back = at(d + 0.1);
+    const ax = front.x - back.x;
+    const ay = front.y - back.y;
+    const a = Math.hypot(ax, ay) < 1e-6 ? Math.atan2(dir.y, dir.x) : Math.atan2(ay, ax);
+    return { x: p.x, y: p.y, a, kind };
+  };
+  const out: Pose[] = [{ ...poseAt(0.1, 'loco'), x: head.x, y: head.y }];
+  let d = 0.52;
+  for (let i = 0; i < t.passengerCars; i++, d += CAR_GAP) out.push(poseAt(d, 'passenger'));
+  for (let i = 0; i < t.freightCars; i++, d += CAR_GAP) out.push(poseAt(d, 'freight'));
+  return out;
+}
+
+/** Draws one vehicle at its pose (tile units). */
+export function drawVehicle(ctx: CanvasRenderingContext2D, p: Pose, colour: string): void {
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(p.a);
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.fillRect(-0.24, -0.1, 0.5, 0.28);
+  ctx.strokeStyle = '#1d1a16';
+  ctx.lineWidth = 0.025;
+  if (p.kind === 'loco') {
+    ctx.fillStyle = colour;
+    ctx.fillRect(-0.27, -0.14, 0.54, 0.28);
+    ctx.strokeRect(-0.27, -0.14, 0.54, 0.28);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(-0.27, -0.14, 0.17, 0.28);
+    ctx.fillStyle = '#fff6c2';
+    ctx.beginPath();
+    ctx.arc(0.27, 0, 0.05, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillRect(-0.05, -0.1, 0.24, 0.06);
+  } else if (p.kind === 'passenger') {
+    ctx.fillStyle = colour;
+    ctx.fillRect(-0.2, -0.12, 0.4, 0.24);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.fillRect(-0.2, -0.12, 0.4, 0.24);
+    ctx.fillStyle = colour;
+    ctx.fillRect(-0.2, -0.04, 0.4, 0.08);
+    ctx.fillStyle = '#bfe3f2';
+    for (let i = -1; i <= 1; i++) ctx.fillRect(i * 0.12 - 0.035, -0.1, 0.07, 0.05);
+    ctx.strokeRect(-0.2, -0.12, 0.4, 0.24);
+  } else {
+    ctx.fillStyle = '#8a6a45';
+    ctx.fillRect(-0.2, -0.12, 0.4, 0.24);
+    ctx.fillStyle = colour;
+    ctx.fillRect(-0.2, -0.12, 0.4, 0.05);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(-0.2, 0.0, 0.4, 0.02);
+    ctx.strokeRect(-0.2, -0.12, 0.4, 0.24);
+  }
+  ctx.restore();
 }

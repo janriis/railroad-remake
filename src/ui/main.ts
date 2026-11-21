@@ -1,38 +1,72 @@
-import { Game } from '../sim/game';
+import { MAX_CARS, STATION, STATION_SIZES, TICKS_PER_DAY, type StationSize } from '../sim/config';
+import { Game, type SaveData, type Station } from '../sim/game';
+import type { TrackPlan } from '../sim/planner';
+import type { Train } from '../sim/trains';
 import { straightPath, type Segment } from '../sim/track';
 import { sameCoord, type Coord } from '../sim/types';
-import { TS, buildTerrainLayer, drawLabel, drawTownBuildings, drawTrack } from './render';
+import {
+  TRAIN_COLOURS,
+  TS,
+  buildTerrainLayer,
+  drawCatchment,
+  drawLabel,
+  drawStation,
+  drawTownBuildings,
+  drawTrack,
+  drawVehicle,
+  trainPoses,
+} from './render';
 
-type Tool = 'pan' | 'track' | 'bridge' | 'demolish';
-
-interface SavedState {
-  seed: number;
-  cash: number;
-  segments: { a: Coord; b: Coord; bridge: boolean }[];
-}
+type Tool = 'pan' | 'track' | 'bridge' | 'demolish' | 'station' | 'train';
 
 interface Preview {
   path: Coord[];
   ok: boolean;
-  /** Safe HTML for the bottom sheet. */
+  /** Safe HTML for the bottom sheet (bridge and demolish tools). */
   html: string;
   /** Segments that would be torn up (demolish preview only). */
   affected: [Coord, Coord][];
+  /** Track planner preview: which segments are bridges. */
+  bridgeSegs?: boolean[];
+}
+
+interface TrackState {
+  main: TrackPlan | null;
+  /** Land-only alternative to a route that needs a bridge. */
+  alt: TrackPlan | null;
+  view: 'main' | 'alt';
+  error: string | null;
+}
+
+interface BuyState {
+  at: Coord;
+  passengerCars: number;
+  freightCars: number;
+}
+
+interface RouteState {
+  trainId: number;
+  stops: Coord[];
+  error: string | null;
 }
 
 const MAP_SIZE = 64;
-const SAVE_KEY = 'railroadsim.save.v1';
+const SAVE_KEY = 'railroadsim.save.v2';
 const TAP_SLOP = 8;
+const TICK_MS = 2000 / TICKS_PER_DAY;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const money = (n: number): string => '$' + Math.round(Math.abs(n)).toLocaleString('en-US');
+const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function humanError(err: string): string {
   const known: Record<string, string> = {
     'insufficient funds': 'Not enough cash for that.',
-    'cannot build on water': 'Track cannot go on water. Use the Bridge tool to cross it.',
+    'cannot build on water': 'That is water. Tap a land tile (use a bridge to cross water).',
     'out of bounds': 'That runs off the edge of the map.',
     'path too short': 'Pick two different tiles.',
+    'start and end are the same tile': 'Pick two different tiles.',
     'tiles are not adjacent': 'Those tiles are not next to each other.',
     'a bridge must be a straight line over water':
       'A bridge must be a straight line (across or at 45 degrees) with water in between.',
@@ -41,42 +75,49 @@ function humanError(err: string): string {
     'bridge too long': 'That gap is too wide. A bridge spans at most 3 water tiles.',
     'not a straight line': 'Demolish needs a straight line (across or at 45 degrees).',
     'no track to demolish': 'There is no track on that line.',
+    'station on track': 'There is a station on that track. Tear up the track around it instead.',
+    'train on track': 'A train is on that track right now.',
+    'no buildable route': 'The water is too wide to bridge here, so there is no way to get there.',
+    'no route over land': 'No way to get there over land.',
+    'route needs a bridge': 'That route needs a bridge. Confirm the bridge to build it.',
+    'tile already has a station': 'There is already a station here.',
+    'station must be on track': 'A station has to sit on track. Tap a tile with track.',
+    'train must start at a station': 'Trains start at a station. Tap a station.',
+    'too many cars': `A train can pull at most ${MAX_CARS} cars.`,
+    'cars need a locomotive': 'Cars need a locomotive.',
+    'route needs at least two stops': 'Pick at least two stations.',
+    'consecutive stops must differ': 'Two stops in a row cannot be the same station.',
+    'stop is not a station': 'Every stop must be a station.',
   };
+  if (err.startsWith('no track connects'))
+    return 'No track connects these stations. Build track between them first.';
   return known[err] ?? err.charAt(0).toUpperCase() + err.slice(1) + '.';
 }
 
-/** Octilinear path: diagonal until aligned with the target, then straight. */
-function octilinear(a: Coord, b: Coord): Coord[] {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const sx = Math.sign(dx);
-  const sy = Math.sign(dy);
-  const diag = Math.min(Math.abs(dx), Math.abs(dy));
-  const path: Coord[] = [a];
-  let { x, y } = a;
-  for (let i = 0; i < diag; i++) path.push({ x: (x += sx), y: (y += sy) });
-  const rest = Math.max(Math.abs(dx), Math.abs(dy)) - diag;
-  const stepX = Math.abs(dx) > Math.abs(dy) ? sx : 0;
-  const stepY = Math.abs(dx) > Math.abs(dy) ? 0 : sy;
-  for (let i = 0; i < rest; i++) path.push({ x: (x += stepX), y: (y += stepY) });
-  return path;
-}
-
-function readSave(raw: unknown): SavedState | null {
-  const s = raw as Partial<SavedState> | null;
-  if (!s || typeof s.seed !== 'number' || typeof s.cash !== 'number' || !Array.isArray(s.segments))
+function readSave(raw: unknown): SaveData | null {
+  const s = raw as Partial<SaveData> | null;
+  if (
+    !s ||
+    s.version !== 1 ||
+    typeof s.gen !== 'object' ||
+    !s.gen ||
+    typeof s.cash !== 'number' ||
+    !Array.isArray(s.segments) ||
+    !Array.isArray(s.stations) ||
+    !Array.isArray(s.trains)
+  )
     return null;
-  return s as SavedState;
+  return s as SaveData;
 }
 
 function start(hotData: unknown): void {
   const canvas = $<HTMLCanvasElement>('map');
   const ctx = canvas.getContext('2d')!;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let game: Game;
   let terrain: HTMLCanvasElement;
   let segs: Segment[] = [];
-  let seed = 0;
 
   const cam = { x: 0, y: 0, zoom: 24 };
   let viewW = 0;
@@ -86,21 +127,30 @@ function start(hotData: unknown): void {
   let tool: Tool = 'pan';
   let startTile: Coord | null = null;
   let preview: Preview | null = null;
+  let tp: TrackState | null = null;
+  let stationTile: Coord | null = null;
+  let buy: BuyState | null = null;
+  let routing: RouteState | null = null;
+  let selTrainId: number | null = null;
+  let selStation: Station | null = null;
+  let actions: Record<string, () => void> = {};
+
+  let paused = false;
+  let speed = 1;
+  let acc = 0;
+  let renderFrac = 0;
+  let lastDay = 0;
+  const alarmed = new Set<number>();
 
   // ---------- persistence ----------
-  const snapshot = (): SavedState => ({
-    seed,
-    cash: game.cash,
-    segments: segs.map((s) => ({ a: s.a, b: s.b, bridge: s.bridge })),
-  });
   const persist = (): void => {
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot()));
+      localStorage.setItem(SAVE_KEY, JSON.stringify(game.toSave()));
     } catch {
       /* storage unavailable: play on without saving */
     }
   };
-  const loadSaved = (): SavedState | null => {
+  const loadSaved = (): SaveData | null => {
     const hot = readSave(hotData);
     if (hot) return hot;
     try {
@@ -120,61 +170,319 @@ function start(hotData: unknown): void {
     cam.x = t ? t.x + 0.5 : MAP_SIZE / 2;
     cam.y = t ? t.y + 0.5 : MAP_SIZE / 2;
     cam.zoom = clampZoom(Math.min(viewW, viewH) / 16);
+    clampCam();
   };
-  const newGame = (nextSeed: number, saved: SavedState | null): void => {
-    seed = nextSeed;
-    game = Game.generate({ width: MAP_SIZE, height: MAP_SIZE, seed });
+  const newGame = (saved: SaveData | null): void => {
+    let g: Game | null = null;
     if (saved) {
-      for (const s of saved.segments) game.track.add(s.a, s.b, s.bridge);
-      game.cash = saved.cash;
+      try {
+        g = Game.fromSave(saved);
+      } catch {
+        g = null;
+      }
     }
+    game =
+      g ??
+      Game.generate({ width: MAP_SIZE, height: MAP_SIZE, seed: 1 + Math.floor(Math.random() * 999_999) });
     terrain = buildTerrainLayer(game.map);
     refreshSegs();
+    alarmed.clear();
+    acc = 0;
+    lastDay = Math.floor(game.time / TICKS_PER_DAY);
     clearSelection();
     centreOnFirstTown();
     updateHud();
     requestDraw();
   };
 
+  // ---------- names ----------
+  const townOf = (c: Coord) => {
+    let best = game.towns[0];
+    let bd = Infinity;
+    for (const t of game.towns) {
+      const d = Math.max(Math.abs(t.x - c.x), Math.abs(t.y - c.y));
+      if (d < bd) {
+        bd = d;
+        best = t;
+      }
+    }
+    return best;
+  };
+  const stationName = (s: Station): string => {
+    const town = townOf(s.at);
+    if (!town) return `Station ${s.id}`;
+    const same = [...game.stations.values()].filter((o) => townOf(o.at) === town).sort((a, b) => a.id - b.id);
+    const idx = same.findIndex((o) => o.id === s.id);
+    return idx > 0 ? `${town.name} ${idx + 1}` : town.name;
+  };
+  const stationNameAt = (c: Coord): string => {
+    const s = game.stationAt(c);
+    return s ? stationName(s) : 'Unknown';
+  };
+  const trainName = (t: Train): string => `Train ${game.trains.indexOf(t) + 1}`;
+  const trainColour = (t: Train): string => TRAIN_COLOURS[game.trains.indexOf(t) % TRAIN_COLOURS.length]!;
+
   // ---------- HUD / UI ----------
   const sheet = $('sheet');
   const sheetMsg = $('sheet-msg');
-  const confirmBtn = $<HTMLButtonElement>('confirm');
   const toast = $('toast');
   let toastTimer = 0;
+  let lastCash = '';
+  let lastDate = '';
 
-  function updateHud(): void {
-    $('cash').textContent = '$' + Math.round(game.cash).toLocaleString('en-US');
-    $('seed').textContent = String(seed);
+  function dateText(): string {
+    const day = Math.floor(game.time / TICKS_PER_DAY);
+    const year = 1850 + Math.floor(day / 360);
+    const month = Math.floor((day % 360) / 30);
+    return `${(day % 30) + 1} ${MONTHS[month]} ${year}`;
   }
-  function showToast(text: string): void {
+  function updateHud(): void {
+    const cash = '$' + Math.round(game.cash).toLocaleString('en-US');
+    if (cash !== lastCash) {
+      lastCash = cash;
+      $('cash').textContent = cash;
+    }
+    const d = dateText();
+    if (d !== lastDate) {
+      lastDate = d;
+      $('date').textContent = d;
+    }
+    $('seed').textContent = String(game.gen?.seed ?? 0);
+  }
+  function showToast(text: string, ms = 3500): void {
     toast.textContent = text;
     toast.classList.remove('hidden');
     window.clearTimeout(toastTimer);
-    toastTimer = window.setTimeout(() => toast.classList.add('hidden'), 3500);
+    toastTimer = window.setTimeout(() => toast.classList.add('hidden'), ms);
   }
+
+  const btn = (act: string, label: string, kind = '', disabled = false): string =>
+    `<button type="button" class="btn ${kind}" data-act="${act}"${disabled ? ' disabled' : ''}>${label}</button>`;
+
+  function setSheet(html: string, acts: Record<string, () => void>): void {
+    sheet.classList.remove('hidden');
+    sheetMsg.innerHTML = html;
+    actions = acts;
+  }
+  sheet.addEventListener('click', (e) => {
+    const el = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
+    if (!el || (el as HTMLButtonElement).disabled) return;
+    actions[el.dataset.act!]?.();
+  });
+
+  const selectedTrain = (): Train | undefined =>
+    selTrainId === null ? undefined : game.trains.find((t) => t.id === selTrainId);
+
+  function statusText(t: Train): string {
+    if (t.route.length < 2) return 'No route yet';
+    if (t.deadlocked) return 'Stuck head-on';
+    if (t.status === 'waiting')
+      return t.blockedBy === null ? 'Waiting: no way through to the next stop' : 'Waiting for the line ahead';
+    if (t.status === 'at-stop') return 'At station';
+    if (t.status === 'moving') return 'Running';
+    return t.next ? 'Running' : 'At station';
+  }
+
+  function routeList(stops: Coord[]): string {
+    return stops.map((c, i) => `${i + 1}. ${stationNameAt(c)}`).join(' → ');
+  }
+
   function renderSheet(): void {
+    if (routing) {
+      const train = game.train(routing.trainId);
+      const n = routing.stops.length;
+      setSheet(
+        `<div class="sheet-title">Route for ${train ? trainName(train) : 'train'}</div>` +
+          (n
+            ? `<div>${routeList(routing.stops)}</div>`
+            : '<div>Tap stations on the map in the order the train should visit them.</div>') +
+          `<div class="sub">${n < 2 ? 'Pick at least two stations.' : 'The train will loop through these stops.'}</div>` +
+          (routing.error ? `<div class="err">${humanError(routing.error)}</div>` : '') +
+          `<div class="btns">${btn('cancel', 'Cancel')}${btn('undo', 'Undo last', '', n === 0)}${btn('done', 'Done', 'primary', n < 2)}</div>`,
+        { cancel: cancelRouting, undo: undoStop, done: finishRouting },
+      );
+      return;
+    }
+    if (buy) {
+      renderBuy();
+      return;
+    }
+    const train = selectedTrain();
+    if (train) {
+      setSheet(
+        `<div class="sheet-title">${trainName(train)} <span class="pill${train.deadlocked ? ' bad' : ''}">${statusText(train)}</span></div>` +
+          `<div class="sub">${plural(train.passengerCars, 'passenger car')}, ${plural(train.freightCars, 'freight car')}</div>` +
+          (train.route.length >= 2
+            ? `<div>Stops: ${routeList(train.route)}</div>`
+            : '<div>This train has no route yet.</div>') +
+          `<div class="btns">${btn('close', 'Close')}${btn('route', 'Change route', 'primary')}</div>`,
+        {
+          close: () => clearSelection(),
+          route: () => beginRouting(train),
+        },
+      );
+      return;
+    }
+    if (selStation) {
+      const st = selStation;
+      setSheet(
+        `<div class="sheet-title">${stationName(st)} station</div>` +
+          `<div class="sub">${st.size[0]!.toUpperCase() + st.size.slice(1)} station, reaches ${st.radius} tile${st.radius === 1 ? '' : 's'} around it (shown on the map).</div>` +
+          `<div class="btns">${btn('close', 'Close')}</div>`,
+        { close: () => clearSelection() },
+      );
+      return;
+    }
     if (tool === 'pan') {
       sheet.classList.add('hidden');
       return;
     }
-    sheet.classList.remove('hidden');
-    const name = { track: 'Track', bridge: 'Bridge', demolish: 'Demolish' }[tool];
-    if (preview) {
-      sheetMsg.innerHTML = preview.html;
-      confirmBtn.hidden = false;
-      confirmBtn.disabled = !preview.ok;
-    } else {
-      sheetMsg.innerHTML = startTile
-        ? `<b>${name}:</b> now tap the end tile`
-        : `<b>${name}:</b> tap the start tile`;
-      confirmBtn.hidden = true;
+    if (tool === 'track') return renderTrackSheet();
+    if (tool === 'station') return renderStationSheet();
+    if (tool === 'train') {
+      setSheet('<b>Train:</b> tap a station to buy a train there', {});
+      return;
     }
-    $('cancel').hidden = !startTile;
+    // Bridge and demolish.
+    const name = { bridge: 'Bridge', demolish: 'Demolish' }[tool];
+    const cancel = btn('cancel', 'Cancel');
+    if (preview) {
+      setSheet(
+        preview.html +
+          `<div class="btns">${cancel}${btn('confirm', 'Confirm', 'primary', !preview.ok)}</div>`,
+        { cancel: clearSelection, confirm },
+      );
+    } else {
+      setSheet(startTile ? `<b>${name}:</b> now tap the end tile` : `<b>${name}:</b> tap the start tile`, {
+        cancel: clearSelection,
+      });
+      if (startTile) sheetMsg.insertAdjacentHTML('beforeend', `<div class="btns">${cancel}</div>`);
+    }
   }
+
+  function renderTrackSheet(): void {
+    const cancel = btn('cancel', 'Cancel');
+    if (!startTile) {
+      setSheet('<b>Track:</b> tap the start (towns snap into place)', {});
+      return;
+    }
+    if (!tp) {
+      setSheet(`<b>Track:</b> now tap the end`, { cancel: clearSelection });
+      sheetMsg.insertAdjacentHTML('beforeend', `<div class="btns">${cancel}</div>`);
+      return;
+    }
+    if (tp.error) {
+      setSheet(`<div class="err">${humanError(tp.error)}</div><div class="btns">${cancel}</div>`, {
+        cancel: clearSelection,
+      });
+      return;
+    }
+    const plan = tp.view === 'alt' ? tp.alt! : tp.main!;
+    const broke = plan.cost > game.cash;
+    const short = broke
+      ? `<div class="err">Not enough cash: it costs ${money(plan.cost)} and you have ${money(game.cash)}.</div>`
+      : '';
+    if (plan.newSegments === 0) {
+      setSheet(
+        `<div class="big">Already connected</div><div class="sub">There is track along this whole route.</div><div class="btns">${cancel}</div>`,
+        { cancel: clearSelection },
+      );
+      return;
+    }
+    if (plan.bridges.length === 0) {
+      const around = tp.view === 'alt' ? 'Going around the water. ' : '';
+      setSheet(
+        `<div class="big">${money(plan.cost)}</div><div class="sub">${around}${plural(plan.newSegments, 'new segment')}</div>${short}` +
+          `<div class="btns">${cancel}${btn('build', 'Build', 'primary', broke)}</div>`,
+        { cancel: clearSelection, build: () => buildPlan(plan, false) },
+      );
+      return;
+    }
+    const bridgeCost = plan.bridges.reduce((s, b) => s + b.cost, 0);
+    const n = plan.bridges.length;
+    setSheet(
+      `<div class="sheet-title">This route crosses water.</div>` +
+        `<div>It needs ${plural(n, 'bridge')} (${money(bridgeCost)} of the ${money(plan.cost)} total).</div>${short}` +
+        `<div class="btns">${cancel}${tp.alt ? btn('around', 'Go around') : ''}${btn('build', 'Build with bridge', 'primary', broke)}</div>`,
+      {
+        cancel: clearSelection,
+        around: () => {
+          if (!tp?.alt) return;
+          tp.view = 'alt';
+          setTrackPreview(tp.alt);
+          renderSheet();
+          requestDraw();
+        },
+        build: () => buildPlan(plan, true),
+      },
+    );
+  }
+
+  function renderStationSheet(): void {
+    const cancel = btn('cancel', 'Cancel');
+    if (!stationTile) {
+      setSheet('<b>Station:</b> tap a tile that has track', {});
+      return;
+    }
+    const opts = STATION_SIZES.map((size) => {
+      const { cost, radius } = STATION[size];
+      return `<button type="button" class="opt" data-act="size-${size}"${cost > game.cash ? ' disabled' : ''}>
+        <span>${size[0]!.toUpperCase() + size.slice(1)}</span><span>${money(cost)}</span><small>reaches ${radius}</small></button>`;
+    }).join('');
+    const acts: Record<string, () => void> = { cancel: clearSelection };
+    for (const size of STATION_SIZES) acts[`size-${size}`] = () => buildStationOf(size);
+    setSheet(
+      `<div class="sheet-title">Build a station here</div><div class="opts">${opts}</div><div class="btns">${cancel}</div>`,
+      acts,
+    );
+  }
+
+  function renderBuy(): void {
+    const b = buy!;
+    const order = { at: b.at, locomotive: true, passengerCars: b.passengerCars, freightCars: b.freightCars };
+    const price = game.trainPrice(order);
+    const cars = b.passengerCars + b.freightCars;
+    const broke = price > game.cash;
+    const row = (label: string, key: 'pass' | 'freight', n: number) =>
+      `<div class="stepper"><span>${label}</span><span class="ctl">
+        <button type="button" data-act="${key}-" aria-label="Fewer ${label}"${n === 0 ? ' disabled' : ''}>−</button>
+        <output>${n}</output>
+        <button type="button" data-act="${key}+" aria-label="More ${label}"${cars >= MAX_CARS ? ' disabled' : ''}>+</button></span></div>`;
+    setSheet(
+      `<div class="sheet-title">Buy a train at ${stationNameAt(b.at)}</div>` +
+        `<div class="sub">One locomotive, up to ${MAX_CARS} cars.</div>` +
+        row('Passenger cars', 'pass', b.passengerCars) +
+        row('Freight cars', 'freight', b.freightCars) +
+        `<div class="big">${money(price)}</div>` +
+        (broke ? `<div class="err">Not enough cash: you have ${money(game.cash)}.</div>` : '') +
+        `<div class="btns">${btn('cancel', 'Cancel')}${btn('buy', 'Buy train', 'primary', broke)}</div>`,
+      {
+        cancel: clearSelection,
+        'pass-': () => step('passengerCars', -1),
+        'pass+': () => step('passengerCars', 1),
+        'freight-': () => step('freightCars', -1),
+        'freight+': () => step('freightCars', 1),
+        buy: buyTrain,
+      },
+    );
+  }
+  function step(key: 'passengerCars' | 'freightCars', d: number): void {
+    if (!buy) return;
+    const next = buy[key] + d;
+    if (next < 0 || (d > 0 && buy.passengerCars + buy.freightCars >= MAX_CARS)) return;
+    buy[key] = next;
+    renderSheet();
+  }
+
   function clearSelection(): void {
     startTile = null;
     preview = null;
+    tp = null;
+    stationTile = null;
+    buy = null;
+    routing = null;
+    selTrainId = null;
+    selStation = null;
     renderSheet();
     requestDraw();
   }
@@ -186,7 +494,64 @@ function start(hotData: unknown): void {
     clearSelection();
   }
 
-  // ---------- previews and commands ----------
+  // ---------- track planner ----------
+  const nearestTown = (t: Coord): Coord => {
+    let best: Coord | null = null;
+    let bd = Infinity;
+    for (const town of game.towns) {
+      const cheb = Math.max(Math.abs(town.x - t.x), Math.abs(town.y - t.y));
+      if (cheb > 1) continue;
+      const d = cheb * 10 + Math.hypot(town.x - t.x, town.y - t.y);
+      if (d < bd) {
+        bd = d;
+        best = town;
+      }
+    }
+    return best ? { x: best.x, y: best.y } : t;
+  };
+
+  function setTrackPreview(plan: TrackPlan): void {
+    preview = {
+      path: [...plan.path],
+      ok: true,
+      html: '',
+      affected: [],
+      bridgeSegs: [...plan.bridgeSegments],
+    };
+  }
+
+  function planBetween(a: Coord, b: Coord): void {
+    const main = game.planTrack(a, b);
+    if (!main.ok) {
+      tp = { main: null, alt: null, view: 'main', error: main.error };
+      preview = { path: [a, b], ok: false, html: '', affected: [] };
+      return;
+    }
+    let alt: TrackPlan | null = null;
+    if (main.plan.bridges.length > 0) {
+      const land = game.planTrack(a, b, { bridges: false });
+      if (land.ok) alt = land.plan;
+    }
+    tp = { main: main.plan, alt, view: 'main', error: null };
+    setTrackPreview(main.plan);
+  }
+
+  function buildPlan(plan: TrackPlan, confirmBridges: boolean): void {
+    const r = game.buildPlannedTrack(plan, { confirmBridges });
+    refreshSegs();
+    updateHud();
+    persist();
+    showToast(
+      r.ok
+        ? r.cost === 0
+          ? 'Nothing to build'
+          : `Built ${plural(plan.newSegments, 'segment')} for ${money(r.cost)}`
+        : humanError(r.error),
+    );
+    clearSelection();
+  }
+
+  // ---------- previews and commands (bridge, demolish) ----------
   const err = (path: Coord[], message: string): Preview => ({
     path,
     ok: false,
@@ -196,17 +561,6 @@ function start(hotData: unknown): void {
 
   function computePreview(a: Coord, b: Coord): Preview {
     if (sameCoord(a, b)) return err([a], 'path too short');
-    if (tool === 'track') {
-      const path = octilinear(a, b);
-      const q = game.quoteTrack(path);
-      if (!q.ok) return err(path, q.error);
-      let fresh = 0;
-      for (let i = 1; i < path.length; i++) if (!game.track.has(path[i - 1]!, path[i]!)) fresh++;
-      if (fresh === 0) return err(path, 'track is already there');
-      if (q.cost > game.cash)
-        return err(path, `not enough cash: it costs ${money(q.cost)} and you have ${money(game.cash)}`);
-      return ok(path, q.cost, `${fresh} new segment${fresh === 1 ? '' : 's'}`);
-    }
     const path = straightPath(a, b);
     if (!path)
       return err(
@@ -219,7 +573,12 @@ function start(hotData: unknown): void {
       if (q.cost === 0) return err(path, 'track is already there');
       if (q.cost > game.cash)
         return err(path, `not enough cash: it costs ${money(q.cost)} and you have ${money(game.cash)}`);
-      return ok(path, q.cost, `Bridge over ${path.length - 2} water tile${path.length === 3 ? '' : 's'}`);
+      return {
+        path,
+        ok: true,
+        html: `<div class="big">${money(q.cost)}</div><div class="sub">Bridge over ${plural(path.length - 2, 'water tile')}</div>`,
+        affected: [],
+      };
     }
     const affected: [Coord, Coord][] = [];
     let refund = 0;
@@ -234,16 +593,8 @@ function start(hotData: unknown): void {
     return {
       path,
       ok: true,
-      html: `<div class="big">+${money(refund)}</div><div class="sub">Refund for tearing up ${affected.length} segment${affected.length === 1 ? '' : 's'}</div>`,
+      html: `<div class="big">+${money(refund)}</div><div class="sub">Refund for tearing up ${plural(affected.length, 'segment')}</div>`,
       affected,
-    };
-  }
-  function ok(path: Coord[], cost: number, sub: string): Preview {
-    return {
-      path,
-      ok: true,
-      html: `<div class="big">${money(cost)}</div><div class="sub">${sub}</div>`,
-      affected: [],
     };
   }
 
@@ -252,15 +603,7 @@ function start(hotData: unknown): void {
     const a = startTile;
     const b = preview.path[preview.path.length - 1]!;
     let message: string;
-    if (tool === 'track') {
-      const path = preview.path;
-      let fresh = 0;
-      for (let i = 1; i < path.length; i++) if (!game.track.has(path[i - 1]!, path[i]!)) fresh++;
-      const r = game.buildTrack(path);
-      message = r.ok
-        ? `Built ${fresh} segment${fresh === 1 ? '' : 's'} for ${money(r.cost)}`
-        : humanError(r.error);
-    } else if (tool === 'bridge') {
+    if (tool === 'bridge') {
       const r = game.buildBridge(a, b);
       message = r.ok ? `Built a bridge for ${money(r.cost)}` : humanError(r.error);
     } else {
@@ -274,20 +617,177 @@ function start(hotData: unknown): void {
     clearSelection();
   }
 
-  // ---------- tapping tiles ----------
+  // ---------- stations and trains ----------
+  function buildStationOf(size: StationSize): void {
+    if (!stationTile) return;
+    const r = game.buildStation(size, stationTile);
+    updateHud();
+    if (r.ok) persist();
+    showToast(r.ok ? `Built a ${size} station for ${money(r.cost)}` : humanError(r.error));
+    clearSelection();
+  }
+
+  function buyTrain(): void {
+    if (!buy) return;
+    const r = game.buyTrain({
+      at: buy.at,
+      locomotive: true,
+      passengerCars: buy.passengerCars,
+      freightCars: buy.freightCars,
+    });
+    updateHud();
+    if (!r.ok) {
+      showToast(humanError(r.error));
+      return;
+    }
+    persist();
+    showToast(`Bought a train for ${money(r.cost)}. Now pick its route.`);
+    buy = null;
+    beginRouting(r.train);
+  }
+
+  function beginRouting(train: Train): void {
+    startTile = null;
+    preview = null;
+    tp = null;
+    stationTile = null;
+    buy = null;
+    selStation = null;
+    selTrainId = train.id;
+    routing = { trainId: train.id, stops: [], error: null };
+    renderSheet();
+    requestDraw();
+  }
+  function cancelRouting(): void {
+    routing = null;
+    renderSheet();
+    requestDraw();
+  }
+  function undoStop(): void {
+    if (!routing) return;
+    routing.stops.pop();
+    routing.error = null;
+    renderSheet();
+    requestDraw();
+  }
+  function finishRouting(): void {
+    if (!routing) return;
+    const r = game.setRoute(routing.trainId, routing.stops);
+    if (!r.ok) {
+      routing.error = r.error;
+      renderSheet();
+      return;
+    }
+    persist();
+    routing = null;
+    showToast('Route set. The train is on its way.');
+    renderSheet();
+    requestDraw();
+  }
+
+  // ---------- tapping ----------
+  function stationNear(wx: number, wy: number): Station | null {
+    const reach = Math.max(0.7, 24 / cam.zoom);
+    let best: Station | null = null;
+    let bd = reach;
+    for (const s of game.stations.values()) {
+      const d = Math.hypot(wx - (s.at.x + 0.5), wy - (s.at.y + 0.5));
+      if (d <= bd) {
+        bd = d;
+        best = s;
+      }
+    }
+    return best;
+  }
+  function trainNear(wx: number, wy: number): Train | null {
+    const reach = Math.max(0.7, 24 / cam.zoom);
+    let best: Train | null = null;
+    let bd = reach;
+    for (const t of game.trains) {
+      const p = trainPoses(t, 0)[0]!;
+      const d = Math.hypot(wx - p.x, wy - p.y);
+      if (d <= bd) {
+        bd = d;
+        best = t;
+      }
+    }
+    return best;
+  }
+
   function handleTap(sx: number, sy: number): void {
-    if (tool === 'pan') return;
-    const t = screenToTile(sx, sy);
+    const w = screenToWorld(sx, sy);
+    const t = { x: Math.floor(w.x), y: Math.floor(w.y) };
+    if (routing) {
+      const st = stationNear(w.x, w.y);
+      if (!st) {
+        showToast('Tap a station to add it to the route.');
+        return;
+      }
+      const last = routing.stops[routing.stops.length - 1];
+      if (last && sameCoord(last, st.at)) {
+        showToast('That is already the last stop. Pick a different station.');
+        return;
+      }
+      routing.stops.push({ ...st.at });
+      routing.error = null;
+      renderSheet();
+      requestDraw();
+      return;
+    }
+    if (tool === 'pan') {
+      const train = trainNear(w.x, w.y);
+      if (train) {
+        clearSelection();
+        selTrainId = train.id;
+      } else {
+        const st = stationNear(w.x, w.y);
+        clearSelection();
+        selStation = st;
+      }
+      renderSheet();
+      requestDraw();
+      return;
+    }
+    if (tool === 'train') {
+      const st = stationNear(w.x, w.y);
+      if (!st) {
+        showToast('Tap a station to buy a train there.');
+        return;
+      }
+      buy = { at: { ...st.at }, passengerCars: 2, freightCars: 0 };
+      renderSheet();
+      requestDraw();
+      return;
+    }
     if (!game.map.inBounds(t)) return;
-    if (startTile && !preview && sameCoord(startTile, t)) {
+    if (tool === 'station') {
+      if (game.isStation(t)) {
+        showToast('There is already a station here.');
+        return;
+      }
+      if (!game.track.touches(t)) {
+        showToast('A station has to sit on track. Tap a tile that has track.');
+        return;
+      }
+      stationTile = t;
+      renderSheet();
+      requestDraw();
+      return;
+    }
+    // Track, bridge, demolish: two taps.
+    const tile = tool === 'track' ? nearestTown(t) : t;
+    if (startTile && !preview && !tp && sameCoord(startTile, tile)) {
       clearSelection();
       return;
     }
-    if (!startTile || preview) {
-      startTile = t;
+    if (!startTile || preview || tp) {
+      startTile = tile;
       preview = null;
+      tp = null;
+    } else if (tool === 'track') {
+      planBetween(startTile, tile);
     } else {
-      preview = computePreview(startTile, t);
+      preview = computePreview(startTile, tile);
     }
     renderSheet();
     requestDraw();
@@ -298,18 +798,24 @@ function start(hotData: unknown): void {
     const min = Math.max(3, Math.min(viewW, viewH) / (MAP_SIZE * 1.1));
     return Math.max(min, Math.min(64, z));
   }
+  /**
+   * Keep the map on screen. It may scroll past its edges only far enough that edge tiles
+   * can be brought out from under the HUD (top) and the toolbar + bottom sheet.
+   */
   function clampCam(): void {
-    cam.x = Math.max(0, Math.min(MAP_SIZE, cam.x));
-    cam.y = Math.max(0, Math.min(MAP_SIZE, cam.y));
+    const OVERSCROLL = { top: 150, bottom: 300, side: 24 }; // CSS px
+    const clampAxis = (v: number, view: number, before: number, after: number) => {
+      const min = (view / 2 - before) / cam.zoom;
+      const max = MAP_SIZE - (view / 2 - after) / cam.zoom;
+      return min > max ? MAP_SIZE / 2 : Math.max(min, Math.min(max, v));
+    };
+    cam.x = clampAxis(cam.x, viewW, OVERSCROLL.side, OVERSCROLL.side);
+    cam.y = clampAxis(cam.y, viewH, OVERSCROLL.top, OVERSCROLL.bottom);
   }
   const screenToWorld = (sx: number, sy: number) => ({
     x: cam.x + (sx - viewW / 2) / cam.zoom,
     y: cam.y + (sy - viewH / 2) / cam.zoom,
   });
-  const screenToTile = (sx: number, sy: number): Coord => {
-    const w = screenToWorld(sx, sy);
-    return { x: Math.floor(w.x), y: Math.floor(w.y) };
-  };
   function zoomAt(sx: number, sy: number, factor: number): void {
     const before = screenToWorld(sx, sy);
     cam.zoom = clampZoom(cam.zoom * factor);
@@ -367,8 +873,8 @@ function start(hotData: unknown): void {
     } else if (pointers.size === 1 && panFrom) {
       const moved = Math.hypot(p.x - panFrom.x, p.y - panFrom.y);
       if (tap && tap.id === e.pointerId && moved > TAP_SLOP) tap.ok = false;
-      // Touch pans only in the Pan tool; a mouse can always drag the map.
-      const canPan = tool === 'pan' || e.pointerType === 'mouse';
+      // Touch pans only in the Pan tool (or while picking a route); a mouse can always drag.
+      const canPan = tool === 'pan' || !!routing || e.pointerType === 'mouse';
       if (canPan && (tap?.ok === false || moved > TAP_SLOP)) {
         cam.x = panFrom.cx - (p.x - panFrom.x) / cam.zoom;
         cam.y = panFrom.cy - (p.y - panFrom.y) / cam.zoom;
@@ -420,7 +926,7 @@ function start(hotData: unknown): void {
     ctx.rect(c.x + inset, c.y + inset, 1 - 2 * inset, 1 - 2 * inset);
   }
 
-  function draw(): void {
+  function draw(now = performance.now()): void {
     const z = cam.zoom;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#26323b';
@@ -450,33 +956,136 @@ function start(hotData: unknown): void {
 
     for (const t of game.towns) drawTownBuildings(ctx, t);
     drawTrack(ctx, segs);
+    drawCatchments();
     drawSelection(z);
+    for (const s of game.stations.values()) drawStation(ctx, s);
+    drawTrains(now, z);
 
     // Screen space: labels keep a constant readable size.
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     for (const t of game.towns) drawLabel(ctx, t.name, ox + (t.x + 0.5) * z, oy + t.y * z - 2);
+    drawRouteMarkers(ox, oy, z);
+  }
+
+  function drawCatchments(): void {
+    if (stationTile && tool === 'station') {
+      for (const size of [...STATION_SIZES].reverse())
+        drawCatchment(ctx, stationTile, STATION[size].radius, size === 'small');
+    }
+    if (selStation) drawCatchment(ctx, selStation.at, selStation.radius, true);
+  }
+
+  function drawTrains(now: number, z: number): void {
+    const frac = paused ? 0 : renderFrac;
+    for (const t of game.trains) {
+      const extra = t.status === 'moving' && t.next ? t.speed * frac : 0;
+      const poses = trainPoses(t, extra);
+      const colour = trainColour(t);
+      for (let i = poses.length - 1; i >= 0; i--) drawVehicle(ctx, poses[i]!, colour);
+      const head = poses[0]!;
+      if (t.id === selTrainId) {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2.5 / z;
+        ctx.beginPath();
+        ctx.arc(head.x, head.y, 0.5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (t.deadlocked) {
+        const pulse = reducedMotion ? 0.5 : 0.5 + 0.12 * Math.sin(now / 160);
+        ctx.fillStyle = 'rgba(230,30,20,0.28)';
+        ctx.strokeStyle = '#e61e14';
+        ctx.lineWidth = 3.5 / z;
+        ctx.beginPath();
+        ctx.arc(head.x, head.y, pulse, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+  }
+
+  function drawRouteMarkers(ox: number, oy: number, z: number): void {
+    const train = routing ? game.train(routing.trainId) : selectedTrain();
+    const stops = routing ? routing.stops : (train?.route ?? []);
+    if (!stops.length) return;
+    const byTile = new Map<string, { c: Coord; nums: number[] }>();
+    stops.forEach((c, i) => {
+      const k = `${c.x},${c.y}`;
+      const e = byTile.get(k) ?? { c, nums: [] };
+      e.nums.push(i + 1);
+      byTile.set(k, e);
+    });
+    ctx.font = '700 13px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const { c, nums } of byTile.values()) {
+      const sx = ox + (c.x + 0.85) * z;
+      const sy = oy + (c.y + 0.1) * z;
+      const label = nums.join(',');
+      const w = Math.max(24, 10 + label.length * 8);
+      ctx.fillStyle = '#1f6f8b';
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(sx - w / 2, sy - 12, w, 24, 12);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(label, sx, sy + 0.5);
+    }
   }
 
   function drawSelection(z: number): void {
+    if (stationTile && tool === 'station') {
+      ctx.strokeStyle = '#1d74d6';
+      ctx.lineWidth = 3 / z;
+      ctx.beginPath();
+      tileRect(stationTile, 0.04);
+      ctx.stroke();
+    }
     if (!startTile) return;
     const good = preview ? preview.ok : true;
     const fill = good ? 'rgba(40,140,230,0.38)' : 'rgba(220,50,40,0.38)';
     const edge = good ? '#1d74d6' : '#d02a20';
     if (preview) {
+      const bs = preview.bridgeSegs;
+      const wet = (c: Coord): boolean => !!bs && game.map.terrainAt(c) === 'water';
       ctx.fillStyle = fill;
       ctx.beginPath();
-      for (const c of preview.path) if (game.map.inBounds(c)) tileRect(c);
+      for (const c of preview.path) if (game.map.inBounds(c) && !wet(c)) tileRect(c);
       ctx.fill();
-      if (preview.path.length > 1) {
-        ctx.setLineDash([0.25, 0.2]);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3 / z;
-        ctx.lineCap = 'round';
+      if (bs) {
+        ctx.fillStyle = 'rgba(255,159,28,0.55)';
         ctx.beginPath();
-        preview.path.forEach((c, i) =>
-          i ? ctx.lineTo(c.x + 0.5, c.y + 0.5) : ctx.moveTo(c.x + 0.5, c.y + 0.5),
-        );
-        ctx.stroke();
+        for (const c of preview.path) if (game.map.inBounds(c) && wet(c)) tileRect(c);
+        ctx.fill();
+      }
+      if (preview.path.length > 1) {
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        for (let i = 1; i < preview.path.length; i++) {
+          const a = preview.path[i - 1]!;
+          const b = preview.path[i]!;
+          const bridge = !!bs?.[i - 1];
+          if (bridge) {
+            ctx.setLineDash([]);
+            ctx.strokeStyle = '#7a3e00';
+            ctx.lineWidth = 6 / z;
+            ctx.beginPath();
+            ctx.moveTo(a.x + 0.5, a.y + 0.5);
+            ctx.lineTo(b.x + 0.5, b.y + 0.5);
+            ctx.stroke();
+            ctx.strokeStyle = '#ffb347';
+            ctx.lineWidth = 3.5 / z;
+          } else {
+            ctx.setLineDash([0.25, 0.2]);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3 / z;
+          }
+          ctx.beginPath();
+          ctx.moveTo(a.x + 0.5, a.y + 0.5);
+          ctx.lineTo(b.x + 0.5, b.y + 0.5);
+          ctx.stroke();
+        }
         ctx.setLineDash([]);
       }
       if (preview.affected.length) {
@@ -512,16 +1121,78 @@ function start(hotData: unknown): void {
     canvas.width = Math.round(viewW * dpr);
     canvas.height = Math.round(viewH * dpr);
     cam.zoom = clampZoom(cam.zoom);
+    clampCam();
     requestDraw();
   }
   window.addEventListener('resize', resize);
   new ResizeObserver(resize).observe(canvas);
 
+  // ---------- time ----------
+  let lastFrame = performance.now();
+  let lastTrainKey = '';
+
+  function afterTicks(): void {
+    updateHud();
+    const day = Math.floor(game.time / TICKS_PER_DAY);
+    if (day !== lastDay) {
+      lastDay = day;
+      persist();
+    }
+    // Deadlock alarm: once per incident.
+    const stuck = game.trains.filter((t) => t.deadlocked);
+    if (stuck.length === 0) alarmed.clear();
+    else if (stuck.some((t) => !alarmed.has(t.id))) {
+      if (alarmed.size === 0)
+        showToast('Two trains are stuck head-on. Add a passing loop or a station between them.', 7000);
+      for (const t of stuck) alarmed.add(t.id);
+    }
+    const sel = selectedTrain();
+    const key = sel ? `${sel.id}|${statusText(sel)}` : '';
+    if (key !== lastTrainKey) {
+      lastTrainKey = key;
+      if (sel && !routing) renderSheet();
+    }
+  }
+
+  function frame(now: number): void {
+    requestAnimationFrame(frame);
+    const dt = Math.min(now - lastFrame, 250);
+    lastFrame = now;
+    if (!paused) {
+      acc += dt * speed;
+      const ticked = Math.min(Math.floor(acc / TICK_MS), 48);
+      acc -= ticked * TICK_MS;
+      if (acc > TICK_MS) acc = 0;
+      for (let i = 0; i < ticked; i++) game.tick();
+      renderFrac = acc / TICK_MS;
+      if (ticked > 0) afterTicks();
+      if (ticked > 0 || game.trains.length > 0) draw(now);
+    }
+  }
+
+  function setPaused(p: boolean): void {
+    paused = p;
+    const icon = $('play-icon');
+    icon.innerHTML = p ? '<path d="M8 5v14l11-7z" />' : '<path d="M7 5h4v14H7zM13 5h4v14h-4z" />';
+    $('play').setAttribute('aria-label', p ? 'Play' : 'Pause');
+    lastFrame = performance.now();
+    requestDraw();
+  }
+  function setSpeed(s: number): void {
+    speed = s;
+    for (const b of document.querySelectorAll<HTMLButtonElement>('.speed'))
+      b.classList.toggle('active', Number(b.dataset.speed) === s);
+  }
+
   // ---------- wiring ----------
   for (const b of document.querySelectorAll<HTMLButtonElement>('.tool'))
     b.addEventListener('click', () => setTool(b.dataset.tool as Tool));
-  confirmBtn.addEventListener('click', confirm);
-  $('cancel').addEventListener('click', clearSelection);
+  $('play').addEventListener('click', () => setPaused(!paused));
+  for (const b of document.querySelectorAll<HTMLButtonElement>('.speed'))
+    b.addEventListener('click', () => {
+      setSpeed(Number(b.dataset.speed));
+      if (paused) setPaused(false);
+    });
 
   const help = $('help');
   const helpBtn = $('help-btn');
@@ -540,7 +1211,7 @@ function start(hotData: unknown): void {
   $('newmap-cancel').addEventListener('click', () => newMapCard.classList.add('hidden'));
   $('newmap-ok').addEventListener('click', () => {
     newMapCard.classList.add('hidden');
-    newGame(1 + Math.floor(Math.random() * 999_999), null);
+    newGame(null);
     persist();
     showToast('New map ready');
   });
@@ -553,16 +1224,48 @@ function start(hotData: unknown): void {
     }
   });
 
-  window.claude?.hot?.snapshot?.(snapshot);
+  window.claude?.hot?.snapshot?.(() => game.toSave());
 
   // ---------- boot ----------
   viewW = canvas.clientWidth;
   viewH = canvas.clientHeight;
   const saved = loadSaved();
-  newGame(saved ? saved.seed : 1 + Math.floor(Math.random() * 999_999), saved);
+  newGame(saved);
   resize();
   setTool('pan');
   if (!saved) persist();
+  Object.defineProperty(window, 'railroadsim', {
+    configurable: true,
+    value: Object.freeze({
+      get game() {
+        return game;
+      },
+      get tool() {
+        return tool;
+      },
+      get paused() {
+        return paused;
+      },
+      get speed() {
+        return speed;
+      },
+      setView(x: number, y: number, zoom: number) {
+        cam.x = x;
+        cam.y = y;
+        cam.zoom = clampZoom(zoom);
+        clampCam();
+        requestDraw();
+      },
+      tileToClient(x: number, y: number) {
+        const r = canvas.getBoundingClientRect();
+        return {
+          x: r.left + viewW / 2 + (x + 0.5 - cam.x) * cam.zoom,
+          y: r.top + viewH / 2 + (y + 0.5 - cam.y) * cam.zoom,
+        };
+      },
+    }),
+  });
+  requestAnimationFrame(frame);
 }
 
 if (window.claude?.hot?.ready) window.claude.hot.ready(start);
