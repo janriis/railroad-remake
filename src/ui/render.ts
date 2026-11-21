@@ -304,6 +304,7 @@ const INDUSTRY_COLOURS: Record<IndustryKind, string> = {
   'grain-farm': '#d9b43c',
   'flour-mill': '#e8e2d2',
   bakery: '#c9763a',
+  'coal-mine': '#3b3b3f',
 };
 
 export const INDUSTRY_LABELS: Record<IndustryKind, string> = {
@@ -313,6 +314,7 @@ export const INDUSTRY_LABELS: Record<IndustryKind, string> = {
   'grain-farm': 'Grain farm',
   'flour-mill': 'Flour mill',
   bakery: 'Bakery',
+  'coal-mine': 'Coal mine',
 };
 
 /** Draws a simple glyph for an industry on its tile (tile units). */
@@ -675,7 +677,34 @@ export function drawTownBuildings(
 export function drawIndustry(ctx: CanvasRenderingContext2D, kind: IndustryKind, at: Coord): void {
   if (!atlasImage()) return drawIndustryProcedural(ctx, kind, at);
   groundShadow(ctx, at.x + 0.5, at.y + 0.95, 0.46, 0.08);
-  sprite(ctx, `industry-${kind}`, at.x + 0.5, at.y + 1.0, 1.08);
+  if (!sprite(ctx, `industry-${kind}`, at.x + 0.5, at.y + 1.0, 1.08)) drawIndustryProcedural(ctx, kind, at);
+}
+
+/** Slots around a station tile: bottom-anchor offsets of the building sprites (tile units). */
+const BUILDING_SPOTS: [number, number][] = [
+  [-0.05, 0.05],
+  [1.05, 0.05],
+  [0.5, 1.7],
+];
+const BUILDING_WIDTH = 0.85;
+
+/** Draws a station's buildings as small sprites around its tile (tile units). */
+export function drawStationBuildings(ctx: CanvasRenderingContext2D, st: Station): void {
+  st.buildings.forEach((b, i) => {
+    const [ox, by] = BUILDING_SPOTS[i] ?? BUILDING_SPOTS[0]!;
+    const cx = st.at.x + ox;
+    const bottom = st.at.y + by;
+    groundShadow(ctx, cx, bottom - 0.03, BUILDING_WIDTH * 0.42, 0.05);
+    const name = b.kind === 'coal-yard' ? 'building-coal-yard' : `industry-${b.kind}`;
+    if (sprite(ctx, name, cx, bottom, BUILDING_WIDTH)) return;
+    // Fallback: the industry glyph scaled down into the slot.
+    const k = b.kind === 'coal-yard' ? 'coal-mine' : b.kind;
+    ctx.save();
+    ctx.translate(cx - BUILDING_WIDTH / 2, bottom - BUILDING_WIDTH);
+    ctx.scale(BUILDING_WIDTH, BUILDING_WIDTH);
+    drawIndustryProcedural(ctx, k, { x: 0, y: 0 });
+    ctx.restore();
+  });
 }
 
 const STATION_WIDTH: Record<string, number> = { small: 1.0, medium: 1.12, large: 1.26 };

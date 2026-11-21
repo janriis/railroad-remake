@@ -9,10 +9,12 @@ export function renderLedger(ui: Ui): void {
   const prev = ui.game.ledger.get(yr - 1) ?? emptyLedgerYear();
   const rows: [string, keyof LedgerYear][] = [
     ['Cargo income', 'cargoIncome'],
+    ['Goods sales', 'goodsSales'],
     ['Construction', 'construction'],
     ['Rolling stock', 'rollingStock'],
     ['Track maintenance', 'trackMaintenance'],
     ['Train running', 'trainRunning'],
+    ['Building upkeep', 'buildingUpkeep'],
   ];
   const cell = (n: number): string =>
     `<td class="${n < 0 ? 'neg' : n > 0 ? 'pos' : ''}">${n === 0 ? '$0' : signed(n)}</td>`;

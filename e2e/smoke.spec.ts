@@ -191,6 +191,34 @@ test('7. Ledger opens from the cash box and closes again', async ({ page }) => {
   await expect(page.locator('#sheet')).toBeHidden();
 });
 
+test('8. Station building: build a bakery at a town station, see it listed, demolish it', async ({
+  page,
+}, info) => {
+  await boot(page, fixtureSave({ track: true, stations: [0] }));
+  await page.locator('#play').click(); // pause: nothing moves under us
+  await tapTile(page, info, at(0));
+  const sheet = page.locator('#sheet-msg');
+  await expect(sheet).toContainText('station');
+  await expect(sheet).toContainText('0 of 1 slot used');
+  const cash0 = await cashOf(page);
+  await act(page, 'build').click();
+  await expect(sheet).toContainText('Bakery');
+  await expect(sheet).toContainText('takes flour');
+  await act(page, 'build-bakery').click();
+  await expect(page.locator('#toast')).toContainText('Built a bakery');
+  expect(await cashOf(page)).toBe(cash0 - 20_000);
+  await expect(sheet).toContainText('1 of 1 slot used');
+  await expect(sheet.locator('ul.buildings')).toContainText('Bakery');
+  expect((await savedGame(page)).stationBuildings?.[0]?.[0]?.kind).toBe('bakery');
+  // Demolish asks first and shows the refund.
+  await act(page, 'demolish-bakery').click();
+  await expect(sheet).toContainText('$5,000 back');
+  await act(page, 'confirm-demolish').click();
+  await expect(page.locator('#toast')).toContainText('Demolished');
+  await expect(sheet).toContainText('0 of 1 slot used');
+  expect(await cashOf(page)).toBe(cash0 - 15_000);
+});
+
 // Keeps `tilePos` exercised so a camera/API change fails loudly in one place.
 test('hook: tileToClient lands inside the viewport for the fixture row', async ({ page }) => {
   await boot(page, fixtureSave());

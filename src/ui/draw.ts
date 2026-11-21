@@ -8,6 +8,7 @@ import {
   drawIndustry,
   drawLabel,
   drawStation,
+  drawStationBuildings,
   drawTownBuildings,
   drawTrack,
   drawVehicle,
@@ -67,6 +68,7 @@ export function draw(ui: Ui, now = performance.now()): void {
   drawRouteLegs(ui, z);
   drawCatchments(ui);
   drawSelection(ui, z);
+  for (const s of ui.game.stations.values()) drawStationBuildings(ctx, s);
   for (const s of ui.game.stations.values()) drawStation(ctx, s);
   drawTrains(ui, now, z);
 

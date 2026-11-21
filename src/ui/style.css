@@ -972,3 +972,23 @@ button:focus-visible {
 .cash-box.negative .cash::after {
   color: inherit;
 }
+
+/* M5: station buildings */
+.opts.list {
+  grid-template-columns: 1fr;
+}
+.opt.wide {
+  min-height: 56px;
+  align-items: flex-start;
+  text-align: left;
+  padding: 8px 12px;
+}
+.sheet-msg ul.buildings li {
+  margin-bottom: 6px;
+}
+.btn.small {
+  min-height: 32px;
+  padding: 2px 10px;
+  font-size: 13px;
+  margin-left: 6px;
+}

@@ -46,10 +46,15 @@ export function humanError(err: string): string {
     'not a station': 'Pick a station.',
     'the train is already there': 'The train is already at that station.',
     'the train is not on a trip': 'That train is not on a trip.',
+    'station serves no town': "This station serves no town, so it can't hold buildings.",
+    'no free building slot': 'No free building slot. Demolish a building first, or use a bigger station.',
+    'no such building': 'That building is no longer there.',
     'no such train': 'That train no longer exists.',
   };
   if (err.startsWith('no track connects'))
     return 'No track connects these stations. Build track between them first.';
+  const dup = /^station already has an? (.+)$/.exec(err);
+  if (dup) return `This station already has a ${dup[1]}.`;
   return known[err] ?? err.charAt(0).toUpperCase() + err.slice(1) + '.';
 }
 

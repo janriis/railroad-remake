@@ -131,6 +131,8 @@ export class Ui {
   carsEdit: CarsState | null = null;
   selTrainId: number | null = null;
   selStation: Station | null = null;
+  /** Station sheet pane: the overview, the build list, or a demolish confirmation for one building. */
+  stationPane: 'info' | 'build' | `demolish:${string}` = 'info';
   selIndustry: Industry | null = null;
   sendTo: SendState | null = null;
   ledgerOpen = false;
@@ -229,6 +231,7 @@ export class Ui {
     this.carsEdit = null;
     this.selTrainId = null;
     this.selStation = null;
+    this.stationPane = 'info';
     this.selIndustry = null;
     this.sendTo = null;
     this.ledgerOpen = false;
