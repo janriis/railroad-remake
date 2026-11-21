@@ -87,3 +87,37 @@ mountain $60,000, diagonal x1.5.
 - Double track: costs today's segment price again (bridge segment $30,000); twice the maintenance; demolish
   refunds both lines.
 - Section signalling: stations, plain double-line tiles and junctions (3+ segments) are passing places.
+
+## m5-advanced-economy
+
+Assumptions the design (docs/advanced-economy.md) does not state. Error strings are placeholders until the
+sim exists.
+
+- "Serves a town" = the station catchment covers at least one town tile (the existing 5x5 footprint rule).
+  A town tile in several catchments counts for the station built first, so a later station may serve no town.
+- Town demand uses the town's whole population, regardless of how much of the town the station covers.
+- Rounding: no rounding is needed for the specified numbers (half prices $30, $200, $20, $45, $25 are whole).
+  Conversion is `floor(input / in) x out`; leftover input stays in the building and carries over to the next month.
+- Saturation bands are measured in units: full price for units 1..D, half price for units D+1..2D, nothing
+  above 2D. The unsold rest waits at the station as cargo (for buildings) or stays at the station (direct sales).
+- "Output goes to the town first" follows the same saturation rule, including the half-price band, before any
+  surplus becomes station cargo.
+- Month-end order: convert input, sell output to demand, charge upkeep. Demand renews at month end after that.
+- A coal yard sells the coal it takes to the town under the same saturation rule (demand 20 coal per 1,000);
+  coal beyond 2x demand waits as coal cargo at the station.
+- Rejections: "station serves no town", "no free building slot", "station already has a <kind>", plus the
+  existing "not a station" and "insufficient funds". Rejected commands spend nothing.
+- Demolishing a building refunds 25% of its build cost as cash; the ledger category of the refund is not specified
+  and not tested here.
+- Slots: slots are counted from the number of buildings; demolishing frees the slot.
+- Deposit stock cap = 6 x monthly production (coal 240, timber 240, grain 360). A station covering a deposit
+  loads from the deposit's stock the same way it loads from today's primary industries.
+- Generated maps contain at least one of each deposit kind (count rule not in the design); the existing
+  timber camp / grain farm rule is untouched by these scenarios.
+- Legacy processing industries (sawmill etc. in old saves) are not station buildings: no upkeep, no town sale.
+- Bread growth: demand is "met" in a month when at least the full-price demand (40 loaves per 1,000) was sold;
+  the town grows 5% if that held in at least half of the year's months. Bread growth is added to the
+  passenger growth in percentage points on the starting population (10% + 5% = 15%).
+- Direct sales to a station that serves no town buy nothing; the delivered goods wait at the station.
+- Freight pay for a direct-sale delivery is computed as today and paid in addition to the sale.
+- Coal needs a freight rate per unit per tile (not in the design); no scenario depends on it.

@@ -14,9 +14,11 @@ make. Railways earn twice: freight pay for hauling, and the profit of their own 
 | Deposit | Terrain | Produces per month |
 |---|---|---|
 | Coal mine | hills or mountain | 40 coal |
-| Timber forest | forest | 40 timber |
-| Grain fields | plains | 60 grain |
+| Timber camp | forest | 40 timber |
+| Grain farm | plains | 60 grain |
 
+- Timber camps and grain farms are today's primary industries, now counted as deposits; coal mines are new.
+  Map generation places each deposit kind as often as it places them today (one per 2,048 tiles).
 - Deposits produce forever (no reserves). They work like today's primary industries: stock waits at the deposit and any station covering it can
   load it. Stock is capped at 6 months of production; anything beyond that is lost.
 - Map generation stops placing sawmills, flour mills, furniture works and bakeries. Saves that already
@@ -41,8 +43,8 @@ make. Railways earn twice: freight pay for hauling, and the profit of their own 
 - **Month end:** a building turns its input into output by its ratio (leftovers wait). Output first goes to
   the town's demand (sold), and the rest becomes cargo waiting at the station for trains to take elsewhere.
 - **Upkeep:** charged every month end, even when idle.
-- **Ledger:** new categories `buildingSales` (income) and `buildingUpkeep`; building purchases count as
-  `construction`.
+- **Ledger:** new categories `goodsSales` (income from every sale to a town, from a building or a direct
+  delivery) and `buildingUpkeep`; building purchases and demolish refunds count as `construction`.
 
 ## Town demand
 
@@ -59,7 +61,8 @@ make. Railways earn twice: freight pay for hauling, and the profit of their own 
   - flour $50 (sold only if a town wants it; towns don't want flour by default)
 - Goods are sold at full price up to the month's demand. Above that the town buys at half price, and
   above twice the demand it buys nothing; the rest waits at the station.
-- **Growth:** a town whose bread demand was met that year grows 5% on top of the passenger growth rule.
+- **Growth:** a town that was sold at least half of its yearly bread demand at full price grows 5 points more
+  that year (added to the passenger growth rate: 10% + 5% = 15%).
 
 ## Direct sales
 
@@ -67,7 +70,16 @@ Loaves, furniture, coal and lumber also sell when a train delivers them to any s
 town, without a building there: the town buys them at its demand price under the same saturation rule.
 Freight pay is paid as well.
 
-## Decided (2026-11-21)
+## Lead decisions while specifying (2026-11-21)
+
+- Coal pays $4 per unit per tile as freight.
+- Order at month end: buildings convert, then sell to the town (full price, then half price), then upkeep;
+  what the town won't buy waits at the station as cargo.
+- A station accepts a cargo if a building there takes it, a covered industry takes it, or it is a
+  direct-sale good and the station serves a town. Anything else stays on the train.
+- Rejections: "station serves no town", "no free building slot", "station already has a <kind>".
+
+## Decided with the user (2026-11-21)
 
 1. Deposits produce forever.
 2. Direct sales at any town station: yes (above).

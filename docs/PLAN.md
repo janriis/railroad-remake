@@ -75,9 +75,10 @@ npm test            # typecheck + unit + bdd
 | M3 | Cargo & economy | Cities (passengers, mail), original industry chains (e.g. timber→sawmill→furniture), supply/demand, payment by distance and transit time, running and maintenance costs, monthly/yearly ledger. Also: double track with section signalling, one-off trips to any station, 45-degree track geometry. **Done** |
 | M4 | Rendering & UI | Canvas map, camera pan/zoom, build tools, train/station panels, Higgsfield assets in place, Playwright smoke. **Art direction (2026-11-21): flat vector**, top-down terrain/vehicles with buildings in a slight ¾ view; reference `assets/style-test/flat.jpg` |
 | M5 | Advanced economy | Raw-material deposits outside towns (coal, timber, grain, ore); processing buildings the player builds inside stations (bakery, sawmill, flour mill, …); town demand with saturation; building profit and upkeep in the ledger. Design: [advanced-economy.md](advanced-economy.md) |
-| M6 | Finance | Loans, bonds, company shares, share price, bankruptcy |
-| M7 | Rivals & progression | AI railroads, eras and locomotive tech unlocks, scenarios with win conditions, save/load |
-| M8 | Polish | Audio, balancing pass, performance, tutorial |
+| M6 | Eras & locomotives | Era-based locomotive models on sale for a window of years, ageing (rising running cost, breakdowns that stop the train for 3 days past working life), overhaul and replace with trade-in; only locomotives age. Design: [locomotives.md](locomotives.md) |
+| M7 | Finance | Loans, bonds, company shares, share price, bankruptcy |
+| M8 | Rivals & progression | AI railroads, ore/steel and later tech unlocks, scenarios with win conditions, save/load |
+| M9 | Polish | Audio, balancing pass, performance, tutorial |
 
 M1–M3 are pure simulation, all driven by BDD. M4 brings visuals. This order gives a playable headless
 game early and keeps the expensive art for when the needs are known.
