@@ -10,14 +10,14 @@ import type { SimWorld } from '../support/world';
 // --- Fixtures ---------------------------------------------------------------------
 
 Given(
-  'a {model} train exists at the station at {coord}',
+  'a/an {model} train exists at the station at {coord}',
   function (this: SimWorld, model: LocoModel, at: Coord) {
     this.normalTrains.push(this.game.addTrain({ at, model }));
   },
 );
 
 Given(
-  'a {model} train with {int} passenger car(s) and {int} freight car(s) exists at the station at {coord}',
+  'a/an {model} train with {int} passenger car(s) and {int} freight car(s) exists at the station at {coord}',
   function (this: SimWorld, model: LocoModel, passengerCars: number, freightCars: number, at: Coord) {
     this.normalTrains.push(this.game.addTrain({ at, model, passengerCars, freightCars }));
   },
@@ -47,6 +47,10 @@ Given(
 );
 
 // --- Commands -----------------------------------------------------------------------
+
+When('I retire the train', function (this: SimWorld) {
+  this.run((g) => g.retireTrain(this.train.id));
+});
 
 When('I overhaul the train', function (this: SimWorld) {
   this.run((g) => g.overhaul(this.train.id));

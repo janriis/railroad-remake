@@ -189,15 +189,30 @@ export const BREAD_GROWTH_RATE = 0.05;
 
 // --- M6: eras and locomotives -------------------------------------------------------
 
-export const LOCO_MODELS = ['pioneer', 'ironside', 'courier', 'hauler', 'pathfinder'] as const;
+export const LOCO_MODELS = [
+  'american',
+  'mogul',
+  'ten-wheeler',
+  'consolidation',
+  'atlantic',
+  'pacific',
+  'mikado',
+  'northern',
+  'streamliner',
+  'road-switcher',
+] as const;
 export type LocoModel = (typeof LOCO_MODELS)[number];
 
-/** Original locomotive designs. On sale from `from` to `to` inclusive (no `to`: never retired). */
+/**
+ * Real North American locomotive types, on sale from `from` to `to` inclusive (no `to`: never retired).
+ * Stats are game-balanced for each type's role. `short` is the name used in scenarios and lists.
+ */
 export const LOCO: Readonly<
   Record<
     LocoModel,
     {
       name: string;
+      short: string;
       from: number;
       to?: number;
       tilesPerDay: number;
@@ -209,53 +224,112 @@ export const LOCO: Readonly<
     }
   >
 > = {
-  pioneer: {
-    name: 'Pioneer',
+  american: {
+    name: '4-4-0 American',
+    short: 'American',
     from: 1850,
-    to: 1885,
+    to: 1890,
     tilesPerDay: 4,
     maxCars: 4,
     price: 50_000,
     running: 2_000,
     life: 20,
   },
-  ironside: {
-    name: 'Ironside',
+  mogul: {
+    name: '2-6-0 Mogul',
+    short: 'Mogul',
+    from: 1865,
+    to: 1905,
+    tilesPerDay: 4,
+    maxCars: 6,
+    price: 65_000,
+    running: 2_300,
+    life: 25,
+  },
+  'ten-wheeler': {
+    name: '4-6-0 Ten-Wheeler',
+    short: 'Ten-Wheeler',
     from: 1870,
-    to: 1910,
+    to: 1915,
     tilesPerDay: 5,
     maxCars: 6,
     price: 80_000,
     running: 2_600,
     life: 25,
   },
-  courier: {
-    name: 'Courier',
-    from: 1895,
-    to: 1940,
-    tilesPerDay: 7,
-    maxCars: 6,
-    price: 120_000,
-    running: 3_400,
-    life: 25,
-  },
-  hauler: {
-    name: 'Hauler',
-    from: 1900,
-    to: 1945,
-    tilesPerDay: 5,
+  consolidation: {
+    name: '2-8-0 Consolidation',
+    short: 'Consolidation',
+    from: 1875,
+    to: 1925,
+    tilesPerDay: 4,
     maxCars: 8,
-    price: 110_000,
-    running: 3_200,
+    price: 90_000,
+    running: 2_900,
     life: 30,
   },
-  pathfinder: {
-    name: 'Pathfinder',
-    from: 1935,
-    tilesPerDay: 8,
-    maxCars: 8,
-    price: 180_000,
+  atlantic: {
+    name: '4-4-2 Atlantic',
+    short: 'Atlantic',
+    from: 1895,
+    to: 1920,
+    tilesPerDay: 7,
+    maxCars: 5,
+    price: 110_000,
+    running: 3_200,
+    life: 25,
+  },
+  pacific: {
+    name: '4-6-2 Pacific',
+    short: 'Pacific',
+    from: 1905,
+    to: 1945,
+    tilesPerDay: 7,
+    maxCars: 7,
+    price: 140_000,
     running: 3_800,
+    life: 30,
+  },
+  mikado: {
+    name: '2-8-2 Mikado',
+    short: 'Mikado',
+    from: 1910,
+    to: 1945,
+    tilesPerDay: 5,
+    maxCars: 10,
+    price: 130_000,
+    running: 3_600,
+    life: 30,
+  },
+  northern: {
+    name: '4-8-4 Northern',
+    short: 'Northern',
+    from: 1927,
+    to: 1950,
+    tilesPerDay: 8,
+    maxCars: 10,
+    price: 200_000,
+    running: 4_800,
+    life: 30,
+  },
+  streamliner: {
+    name: 'Streamlined passenger diesel',
+    short: 'Streamliner',
+    from: 1937,
+    tilesPerDay: 9,
+    maxCars: 8,
+    price: 220_000,
+    running: 4_200,
+    life: 30,
+  },
+  'road-switcher': {
+    name: 'Road-switcher diesel',
+    short: 'Road switcher',
+    from: 1949,
+    tilesPerDay: 7,
+    maxCars: 12,
+    price: 180_000,
+    running: 3_500,
     life: 30,
   },
 };

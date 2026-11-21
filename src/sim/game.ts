@@ -419,7 +419,7 @@ export class Game {
 
   trainPrice(order: TrainOrder): number {
     return (
-      (order.locomotive ? LOCO[order.model ?? 'pioneer'].price : 0) +
+      (order.locomotive ? LOCO[order.model ?? 'american'].price : 0) +
       (order.passengerCars ?? 0) * PASSENGER_CAR_COST +
       (order.freightCars ?? 0) * FREIGHT_CAR_COST
     );
@@ -428,7 +428,7 @@ export class Game {
   buyTrain(order: TrainOrder): { ok: true; cost: number; train: Train } | { ok: false; error: string } {
     const cars = (order.passengerCars ?? 0) + (order.freightCars ?? 0);
     if (!order.locomotive) return fail('cars need a locomotive');
-    const model = order.model ?? 'pioneer';
+    const model = order.model ?? 'american';
     if (!this.onSale(model)) return fail('model not on sale');
     if (cars > LOCO[model].maxCars) return fail('too many cars');
     if (!this.isStation(order.at)) return fail('train must start at a station');
@@ -447,7 +447,7 @@ export class Game {
     passengerCars?: number;
     freightCars?: number;
   }): Train {
-    const model = opts.model ?? 'pioneer';
+    const model = opts.model ?? 'american';
     const train: Train = {
       id: this.nextId++,
       at: opts.at,
@@ -929,6 +929,23 @@ export class Game {
     return ok(cost);
   }
 
+  /**
+   * Retire a train standing at a station: the company gets the locomotive's trade-in value plus the
+   * cars' resale value. The train and any cargo on board are gone.
+   */
+  retireTrain(trainId: number): CommandResult {
+    const train = this.train(trainId);
+    if (!train) return fail('no such train');
+    if (!this.atStation(train)) return fail('train must be at a station');
+    const refund =
+      this.tradeInValue(train) +
+      Math.round(train.passengerCars * PASSENGER_CAR_COST * CAR_RESALE_RATE) +
+      Math.round(train.freightCars * FREIGHT_CAR_COST * CAR_RESALE_RATE);
+    this.trains.splice(this.trains.indexOf(train), 1);
+    this.spend(-refund, 'rollingStock');
+    return ok(-refund);
+  }
+
   /** What the current locomotive is worth when traded in: 50% new, falling to 10% over its working life. */
   tradeInValue(train: Train): number {
     const m = LOCO[train.model];
@@ -1103,7 +1120,7 @@ export class Game {
       train.trip = t.trip ?? null;
       train.lastStop = t.lastStop ?? null;
       train.prev = t.prev ?? null;
-      train.model = t.model ?? 'pioneer';
+      train.model = t.model ?? 'american';
       train.boughtAt = t.boughtAt ?? 0;
       train.brokenUntil = t.brokenUntil ?? null;
     }

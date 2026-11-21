@@ -1,6 +1,8 @@
 import { defineParameterType } from '@cucumber/cucumber';
 import {
   BUILDING_KINDS,
+  LOCO,
+  LOCO_MODELS,
   CARGO_TYPES,
   INDUSTRY_KINDS,
   type BuildingKind,
@@ -66,9 +68,9 @@ defineParameterType({
   transformer: (s: string): BuildingKind => s.replace(' ', '-') as BuildingKind,
 });
 
-/** Pioneer | Ironside | Courier | Hauler | Pathfinder */
+/** American | Mogul | Ten-Wheeler | … | Road switcher (the short names in LOCO) */
 defineParameterType({
   name: 'model',
-  regexp: /Pioneer|Ironside|Courier|Hauler|Pathfinder/,
-  transformer: (s: string): LocoModel => s.toLowerCase() as LocoModel,
+  regexp: new RegExp(LOCO_MODELS.map((m) => LOCO[m].short).join('|')),
+  transformer: (s: string): LocoModel => LOCO_MODELS.find((m) => LOCO[m].short === s)!,
 });

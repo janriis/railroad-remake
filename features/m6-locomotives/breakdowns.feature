@@ -20,8 +20,9 @@ Feature: Breakdowns
     And a small station exists at (18, 5)
 
   # Chance = 1% + 2% x (age - working life) once age has reached the working life.
-  #   Pioneer (life 20): ages 0 and 19 -> 1%; age 20 -> 1%; age 21 -> 3%; age 25 -> 11%
-  #   Pathfinder (life 30): age 31 -> 3%
+  #   American (life 20): ages 0 and 19 -> 1%; age 20 -> 1%; age 21 -> 3%; age 25 -> 11%
+  #   Mogul (life 25): age 26 -> 3%
+  #   Northern (life 30): age 31 -> 3%
   Scenario Outline: The monthly breakdown chance grows after the working life
     Given a <model> train exists at the station at (2, 5)
     And the train is <age> years old
@@ -29,12 +30,13 @@ Feature: Breakdowns
 
     Examples:
       | model      | age | chance |
-      | Pioneer    | 0   | 1      |
-      | Pioneer    | 19  | 1      |
-      | Pioneer    | 20  | 1      |
-      | Pioneer    | 21  | 3      |
-      | Pioneer    | 25  | 11     |
-      | Pathfinder | 31  | 3      |
+      | American   | 0   | 1      |
+      | American   | 19  | 1      |
+      | American   | 20  | 1      |
+      | American   | 21  | 3      |
+      | American   | 25  | 11     |
+      | Mogul      | 26  | 3      |
+      | Northern   | 31  | 3      |
 
   Scenario: A broken-down train stops where it is for 3 days and then moves again
     Given breakdowns always happen
@@ -51,11 +53,16 @@ Feature: Breakdowns
 
   # Repairs are 5% of the model's price, plus the locomotive's ordinary running cost for the month
   # (new locomotive, no cars):
-  #   Pioneer    5% x $50,000  = $2,500 + $2,000 = $4,500
-  #   Ironside   5% x $80,000  = $4,000 + $2,600 = $6,600
-  #   Courier    5% x $120,000 = $6,000 + $3,400 = $9,400
-  #   Hauler     5% x $110,000 = $5,500 + $3,200 = $8,700
-  #   Pathfinder 5% x $180,000 = $9,000 + $3,800 = $12,800
+  #   American      5% x $50,000  = $2,500  + $2,000 = $4,500
+  #   Mogul         5% x $65,000  = $3,250  + $2,300 = $5,550
+  #   Ten-Wheeler   5% x $80,000  = $4,000  + $2,600 = $6,600
+  #   Consolidation 5% x $90,000  = $4,500  + $2,900 = $7,400
+  #   Atlantic      5% x $110,000 = $5,500  + $3,200 = $8,700
+  #   Pacific       5% x $140,000 = $7,000  + $3,800 = $10,800
+  #   Mikado        5% x $130,000 = $6,500  + $3,600 = $10,100
+  #   Northern      5% x $200,000 = $10,000 + $4,800 = $14,800
+  #   Streamliner   5% x $220,000 = $11,000 + $4,200 = $15,200
+  #   Road switcher 5% x $180,000 = $9,000  + $3,500 = $12,500
   Scenario Outline: A breakdown costs 5% of the model's price in repairs
     Given breakdowns always happen
     And a <model> train exists at the station at (2, 5)
@@ -64,12 +71,17 @@ Feature: Breakdowns
     And the company should have paid <total> in train running costs
 
     Examples:
-      | model      | total   |
-      | Pioneer    | $4,500  |
-      | Ironside   | $6,600  |
-      | Courier    | $9,400  |
-      | Hauler     | $8,700  |
-      | Pathfinder | $12,800 |
+      | model         | total   |
+      | American      | $4,500  |
+      | Mogul         | $5,550  |
+      | Ten-Wheeler   | $6,600  |
+      | Consolidation | $7,400  |
+      | Atlantic      | $8,700  |
+      | Pacific       | $10,800 |
+      | Mikado        | $10,100 |
+      | Northern      | $14,800 |
+      | Streamliner   | $15,200 |
+      | Road switcher | $12,500 |
 
   # Six month ends with no breakdowns: 6 x $2,000 = $12,000 (age stays 0).
   Scenario: No breakdowns happen and nothing is charged when they are switched off
@@ -79,7 +91,7 @@ Feature: Breakdowns
     Then the train should not be broken down
     And the company should have paid $12,000 in train running costs
 
-  # A Pioneer aged 25 is 5 years past its working life (an 11% chance a month), but "never" still means never.
+  # An American aged 25 is 5 years past its working life (an 11% chance a month), but "never" still means never.
   # Running cost: 2,000 x 1.03^25 = 4,187.56 -> $4,188 a month, 3 months = $12,564.
   Scenario: A worn-out locomotive does not break down when breakdowns are switched off
     Given breakdowns never happen

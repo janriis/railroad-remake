@@ -9,17 +9,25 @@ sale. Locomotives age: they cost more to run each year and, once past their work
 down more often. The player replaces a worn locomotive with a newer model, keeping the train's cars and
 route.
 
-## Models (original designs)
+## Models (real North American types, decided with the user 2026-11-21)
 
-| Model | On sale | Speed (tiles/day) | Max cars | Price | Running / month | Working life |
-|---|---|---:|---:|---:|---:|---:|
-| Pioneer (light steam) | 1850–1885 | 4 | 4 | $50,000 | $2,000 | 20 years |
-| Ironside (heavy steam) | 1870–1910 | 5 | 6 | $80,000 | $2,600 | 25 years |
-| Courier (express steam) | 1895–1940 | 7 | 6 | $120,000 | $3,400 | 25 years |
-| Hauler (freight steam) | 1900–1945 | 5 | 8 | $110,000 | $3,200 | 30 years |
-| Pathfinder (diesel) | 1935– | 8 | 8 | $180,000 | $3,800 | 30 years |
+Real locomotive types named by wheel arrangement, each on sale from about when it came into wide use
+until it was no longer built. Speeds, car limits and costs are game-balanced to fit each type's role.
 
-- Today's single locomotive becomes the Pioneer; existing saves map to it.
+| Model | Short name | On sale | Speed (tiles/day) | Max cars | Price | Running / month | Working life |
+|---|---|---|---:|---:|---:|---:|---:|
+| 4-4-0 American | American | 1850–1890 | 4 | 4 | $50,000 | $2,000 | 20 years |
+| 2-6-0 Mogul | Mogul | 1865–1905 | 4 | 6 | $65,000 | $2,300 | 25 years |
+| 4-6-0 Ten-Wheeler | Ten-Wheeler | 1870–1915 | 5 | 6 | $80,000 | $2,600 | 25 years |
+| 2-8-0 Consolidation | Consolidation | 1875–1925 | 4 | 8 | $90,000 | $2,900 | 30 years |
+| 4-4-2 Atlantic | Atlantic | 1895–1920 | 7 | 5 | $110,000 | $3,200 | 25 years |
+| 4-6-2 Pacific | Pacific | 1905–1945 | 7 | 7 | $140,000 | $3,800 | 30 years |
+| 2-8-2 Mikado | Mikado | 1910–1945 | 5 | 10 | $130,000 | $3,600 | 30 years |
+| 4-8-4 Northern | Northern | 1927–1950 | 8 | 10 | $200,000 | $4,800 | 30 years |
+| Streamlined passenger diesel | Streamliner | 1937– | 9 | 8 | $220,000 | $4,200 | 30 years |
+| Road-switcher diesel | Road switcher | 1949– | 7 | 12 | $180,000 | $3,500 | 30 years |
+
+- Today's single locomotive becomes the 4-4-0 American; existing saves map to it.
 - Buying offers only models on sale in the current year. Trains already running keep their model.
 
 ## Wear
@@ -43,6 +51,12 @@ route.
 - **Too many cars:** if the new model can pull fewer cars than the train has, the extras are sold at the
   usual car resale rate. The player sees this before confirming.
 
+## Retiring a train (added with the user 2026-11-21)
+
+A train standing at a station can be retired when it is no longer needed. The company gets the
+locomotive's trade-in value plus 50% of each car's price, booked as rolling stock. The train and any cargo
+on board are gone.
+
 ## UI notes
 
 - Train sheet: model, age, condition (working life left), running cost now, and a Replace button.
@@ -58,7 +72,7 @@ route.
 
 - **On sale:** a model is on sale when `from <= year` and (no `to`, or `year <= to`), using the game date.
 - **Car limit:** the model's max cars replaces today's fixed limit of 6 when buying a train or changing
-  cars. Trains from older saves become Pioneers and keep any extra cars until their cars are changed.
+  cars. Trains from older saves become Americans and keep any extra cars until their cars are changed.
 - **Age** is in whole years since purchase (360-day years): `floor(days since purchase / 360)`.
 - **Running cost** of a locomotive each month is `round(base × 1.03^age)` in whole dollars, booked under
   train running as today. Cars cost as today.

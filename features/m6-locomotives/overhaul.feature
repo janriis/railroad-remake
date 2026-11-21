@@ -19,17 +19,19 @@ Feature: Overhauling locomotives
 
   # 30% x $50,000 = $15,000
   Scenario: An overhaul costs 30% of the price and makes the locomotive new again
-    Given a Pioneer train exists at the station at (2, 5)
+    Given a train exists at the station at (2, 5)
     And the train is 12 years old
     When I overhaul the train
     Then the command succeeds
     And it cost $15,000
     And the company's cash is $985,000
     And the train's age should be 0 years
-    And the train should be a Pioneer
+    And the train should be an American
 
-  # 30% of the price: Ironside $80,000 -> $24,000; Courier $120,000 -> $36,000;
-  # Hauler $110,000 -> $33,000; Pathfinder $180,000 -> $54,000.
+  # 30% of the price: American $50,000 -> $15,000; Mogul $65,000 -> $19,500; Ten-Wheeler $80,000 -> $24,000;
+  # Consolidation $90,000 -> $27,000; Atlantic $110,000 -> $33,000; Pacific $140,000 -> $42,000;
+  # Mikado $130,000 -> $39,000; Northern $200,000 -> $60,000; Streamliner $220,000 -> $66,000;
+  # Road switcher $180,000 -> $54,000.
   Scenario Outline: The overhaul price depends on the model
     Given the calendar starts on 1 January <year>
     And a <model> train exists at the station at (2, 5)
@@ -39,30 +41,36 @@ Feature: Overhauling locomotives
     And the train's age should be 0 years
 
     Examples:
-      | year | model      | cost    |
-      | 1880 | Ironside   | $24,000 |
-      | 1900 | Courier    | $36,000 |
-      | 1900 | Hauler     | $33,000 |
-      | 1940 | Pathfinder | $54,000 |
+      | year | model         | cost     |
+      | 1860 | American      | $15,000  |
+      | 1880 | Mogul         | $19,500  |
+      | 1880 | Ten-Wheeler   | $24,000  |
+      | 1900 | Consolidation | $27,000  |
+      | 1900 | Atlantic      | $33,000  |
+      | 1910 | Pacific       | $42,000  |
+      | 1920 | Mikado        | $39,000  |
+      | 1930 | Northern      | $60,000  |
+      | 1940 | Streamliner   | $66,000  |
+      | 1950 | Road switcher | $54,000  |
 
-  # After the overhaul the Pioneer costs the age-0 running cost, $2,000, instead of $2,688 at age 10.
+  # After the overhaul the American costs the age-0 running cost, $2,000, instead of $2,688 at age 10.
   # The $15,000 overhaul is not a running cost.
   Scenario: An overhauled locomotive runs at the cost of a new one
-    Given a Pioneer train exists at the station at (2, 5)
+    Given a train exists at the station at (2, 5)
     And the train is 10 years old
     When I overhaul the train
     And 1 months pass
     Then the company should have paid $2,000 in train running costs
 
   Scenario: An overhaul takes a worn-out locomotive out of the worn-out state
-    Given a Pioneer train exists at the station at (2, 5)
+    Given a train exists at the station at (2, 5)
     And the train is 22 years old
     And the train should be worn out
     When I overhaul the train
     Then the train should be in working order
 
   Scenario: An overhaul keeps the train's cars and route
-    Given a Pioneer train with 2 passenger cars and 0 freight cars exists at the station at (2, 5)
+    Given an American train with 2 passenger cars and 0 freight cars exists at the station at (2, 5)
     And the train has the route (2, 5), (18, 5)
     And the train is 6 years old
     When I overhaul the train
@@ -70,7 +78,7 @@ Feature: Overhauling locomotives
     And the train route should have 2 stops
 
   Scenario: An overhaul needs the train to be at a station
-    Given a Pioneer train exists at the station at (2, 5)
+    Given a train exists at the station at (2, 5)
     And the train has the route (2, 5), (18, 5)
     And the train is 12 years old
     When 1 days pass
@@ -79,10 +87,10 @@ Feature: Overhauling locomotives
     And no money was spent
     And the train's age should be 12 years
 
-  # Pioneer is on sale until 1885, so by 1 January 1900 there is no new Pioneer to restore it to.
+  # American is on sale until 1890, so by 1 January 1900 there is no new American to restore it to.
   Scenario: A model that is no longer on sale cannot be overhauled
     Given the calendar starts on 1 January 1900
-    And a Pioneer train exists at the station at (2, 5)
+    And a train exists at the station at (2, 5)
     And the train is 10 years old
     When I overhaul the train
     Then the command is rejected with "model no longer on sale"
@@ -90,7 +98,7 @@ Feature: Overhauling locomotives
     And the train's age should be 10 years
 
   Scenario: The company must afford an overhaul
-    Given a Pioneer train exists at the station at (2, 5)
+    Given a train exists at the station at (2, 5)
     And the train is 10 years old
     And the company has $10,000 in cash
     When I overhaul the train
