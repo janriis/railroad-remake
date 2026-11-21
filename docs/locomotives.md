@@ -52,7 +52,34 @@ route.
 
 1. Breakdowns stop the train where it is for 3 days (it can block single track).
 2. Only locomotives age; cars don't.
+3. New games always start in 1850 (no era choice).
 
-## Still open
+## Lead decisions while specifying (2026-11-21)
 
-- Choosing a start year (era) for a new game: decide when M6 starts.
+- **On sale:** a model is on sale when `from <= year` and (no `to`, or `year <= to`), using the game date.
+- **Car limit:** the model's max cars replaces today's fixed limit of 6 when buying a train or changing
+  cars. Trains from older saves become Pioneers and keep any extra cars until their cars are changed.
+- **Age** is in whole years since purchase (360-day years): `floor(days since purchase / 360)`.
+- **Running cost** of a locomotive each month is `round(base × 1.03^age)` in whole dollars, booked under
+  train running as today. Cars cost as today.
+- **Breakdowns** are rolled once per train at every month end with the game's seeded `Rng`.
+  - Chance: 1% while `age < working life`, then `1% + 2% × (age − working life)` (so 1% in the first year
+    past it, 3% the next, and so on).
+  - A broken-down train stops where it is: it keeps holding its tile or segment, so other trains wait
+    behind it. It starts moving again 3 days (72 hours) later.
+  - Repairs cost 5% of the model's price and are booked under train running.
+  - Scenarios force the roll with a fixture ("breakdowns always happen" / "never happen") instead of
+    relying on the random numbers.
+- **Overhaul** works only for a train standing at a station. It costs 30% of the model's price, booked as
+  rolling stock, and sets the age to 0. Rejections: "train must be at a station", "model no longer on
+  sale".
+- **Replacement** also works only at a station. It costs the new model's price minus the trade-in value,
+  booked as rolling stock.
+  - Trade-in: `round(price × (0.5 − 0.4 × min(1, age / working life)))`, so 50% when new and 10% from the
+    end of its working life.
+  - If the new model can pull fewer cars, the train keeps passenger cars first and the extras are sold at
+    the car resale rate.
+  - The new locomotive's age starts at 0 and the train's speed changes to the new model's.
+  - Rejections: "train must be at a station", "model not on sale", "insufficient funds".
+- **Buying:** a train can only be bought with a model on sale ("model not on sale").
+- **Saved state:** model, purchase time and broken-down-until time.
