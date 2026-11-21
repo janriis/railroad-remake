@@ -49,6 +49,8 @@ export const LOCOMOTIVE_COST = 50_000;
 export const PASSENGER_CAR_COST = 10_000;
 export const FREIGHT_CAR_COST = 8_000;
 export const MAX_CARS = 6;
+/** Share of a car's price paid back when it is taken off a train. */
+export const CAR_RESALE_RATE = 0.5;
 
 /** 1 tick = 1 game hour. */
 export const TICKS_PER_DAY = 24;

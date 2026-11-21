@@ -1,5 +1,6 @@
 import {
   BRIDGE_SEGMENT_COST,
+  CAR_RESALE_RATE,
   DEFAULT_STARTING_CASH,
   DEMOLISH_REFUND_RATE,
   DIAGONAL_COST_FACTOR,
@@ -21,7 +22,7 @@ import { findTrackPath } from './pathfinding';
 import { planTrack, priceRoute, type PlanOptions, type PlanResult, type TrackPlan } from './planner';
 import { Rng } from './rng';
 import { TrackNetwork, isAdjacent, isDiagonal, straightPath } from './track';
-import { advanceTrains, unitsPerTick, type Train } from './trains';
+import { advanceTrains, unitsPerTick, type CarCounts, type Train } from './trains';
 import { coordKey, fail, ok, type CommandResult, type Coord, type Terrain } from './types';
 
 export interface GameOptions {
@@ -67,6 +68,7 @@ export interface SaveData {
     passengerCars: number;
     freightCars: number;
     route: Coord[];
+    stopOrders?: (CarCounts | null)[];
     target: number;
   }[];
 }
@@ -303,6 +305,7 @@ export class Game {
       passengerCars: opts.passengerCars ?? 0,
       freightCars: opts.freightCars ?? 0,
       route: [],
+      stopOrders: [],
       target: 0,
       plan: [],
       status: 'idle',
@@ -324,7 +327,11 @@ export class Game {
    * Give a train its stops. It heads for the first stop, or the second if it already
    * stands on the first, and then cycles through them.
    */
-  setRoute(trainId: number, stops: readonly Coord[]): CommandResult {
+  setRoute(
+    trainId: number,
+    stops: readonly Coord[],
+    orders: readonly (CarCounts | null)[] = [],
+  ): CommandResult {
     const train = this.train(trainId);
     if (!train) return fail('no such train');
     if (stops.length < 2) return fail('route needs at least two stops');
@@ -333,15 +340,47 @@ export class Game {
       const next = stops[(i + 1) % stops.length]!;
       if (next.x === stops[i]!.x && next.y === stops[i]!.y) return fail('consecutive stops must differ');
     }
+    const owned = train.passengerCars + train.freightCars;
+    for (const order of orders) {
+      if (!order) continue;
+      if (order.passengerCars < 0 || order.freightCars < 0) return fail('car counts cannot be negative');
+      if (order.passengerCars + order.freightCars !== owned)
+        return fail(`a stop order must use the train's ${owned} cars`);
+    }
     const legs: [Coord, Coord][] = [[train.at, stops[0]!]];
     for (let i = 1; i < stops.length; i++) legs.push([stops[i - 1]!, stops[i]!]);
     for (const [a, b] of legs)
       if (!findTrackPath(this.track, a, b)) return fail(`no track connects ${fmt(a)} and ${fmt(b)}`);
 
     train.route = stops.map((c) => ({ ...c }));
+    train.stopOrders = stops.map((_, i) => (orders[i] ? { ...orders[i]! } : null));
     train.target = train.at.x === stops[0]!.x && train.at.y === stops[0]!.y ? 1 : 0;
     train.plan = [];
     return ok(0);
+  }
+
+  /**
+   * Change how many cars of each type a train owns. Added cars cost their price; removed
+   * cars pay back CAR_RESALE_RATE of it. Stop orders that no longer fit are dropped.
+   */
+  changeCars(trainId: number, cars: CarCounts): CommandResult {
+    const train = this.train(trainId);
+    if (!train) return fail('no such train');
+    if (cars.passengerCars < 0 || cars.freightCars < 0) return fail('car counts cannot be negative');
+    if (cars.passengerCars + cars.freightCars > MAX_CARS) return fail('too many cars');
+    const price = (n: number, unit: number) => (n > 0 ? n * unit : Math.round(n * unit * CAR_RESALE_RATE));
+    const cost =
+      price(cars.passengerCars - train.passengerCars, PASSENGER_CAR_COST) +
+      price(cars.freightCars - train.freightCars, FREIGHT_CAR_COST);
+    if (cost > this.cash) return fail('insufficient funds');
+    train.passengerCars = cars.passengerCars;
+    train.freightCars = cars.freightCars;
+    const owned = cars.passengerCars + cars.freightCars;
+    train.stopOrders = train.stopOrders.map((o) =>
+      o && o.passengerCars + o.freightCars === owned ? o : null,
+    );
+    this.cash -= cost;
+    return ok(cost);
   }
 
   // --- Time --------------------------------------------------------------------
@@ -372,6 +411,7 @@ export class Game {
         passengerCars: t.passengerCars,
         freightCars: t.freightCars,
         route: t.route,
+        stopOrders: t.stopOrders,
         target: t.target,
       })),
     };
@@ -387,6 +427,7 @@ export class Game {
     for (const t of save.trains) {
       const train = game.addTrain(t);
       train.route = t.route;
+      train.stopOrders = t.stopOrders ?? t.route.map(() => null);
       train.target = t.target;
     }
     return game;

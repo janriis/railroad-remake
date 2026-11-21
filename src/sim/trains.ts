@@ -3,6 +3,11 @@ import { findTrackPath, stepUnits } from './pathfinding';
 import type { TrackNetwork } from './track';
 import { coordKey, sameCoord, type Coord } from './types';
 
+export interface CarCounts {
+  readonly passengerCars: number;
+  readonly freightCars: number;
+}
+
 export type TrainStatus = 'idle' | 'moving' | 'waiting' | 'at-stop';
 
 /**
@@ -19,9 +24,11 @@ export interface Train {
   progress: number;
   /** Distance units per tick. */
   readonly speed: number;
-  readonly passengerCars: number;
-  readonly freightCars: number;
+  passengerCars: number;
+  freightCars: number;
   route: Coord[];
+  /** Per stop (same index as `route`): the cars to leave that stop with, or null to keep them. */
+  stopOrders: (CarCounts | null)[];
   /** Index in `route` of the stop it is heading for. */
   target: number;
   /** Planned tiles ahead, starting with `next`. Other trains read it to avoid head-on routes. */
@@ -76,6 +83,11 @@ function stepTrain(ctx: MovementContext, t: Train): void {
 
   if (t.route.length >= 2 && sameCoord(t.at, t.route[t.target]!)) {
     t.journeys++;
+    const order = t.stopOrders[t.target];
+    if (order) {
+      t.passengerCars = order.passengerCars;
+      t.freightCars = order.freightCars;
+    }
     t.target = (t.target + 1) % t.route.length;
     t.plan = [];
     t.status = 'at-stop'; // dwell for the rest of this tick

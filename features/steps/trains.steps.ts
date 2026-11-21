@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { Given, Then, When } from '@cucumber/cucumber';
+import { Given, Then, When, type DataTable } from '@cucumber/cucumber';
 import { STATION_SIZES, TICKS_PER_DAY, type StationSize } from '../../src/sim/config';
+import type { CarCounts } from '../../src/sim/trains';
 import { sameCoord, type Coord } from '../../src/sim/types';
 import type { SimWorld } from '../support/world';
 
@@ -161,4 +162,54 @@ Then('no train should be deadlocked', function (this: SimWorld) {
 
 Then('the trains should be reported as deadlocked', function (this: SimWorld) {
   for (const t of this.game.trains) assert.ok(t.deadlocked, `train ${t.id} is not deadlocked`);
+});
+
+// --- Cars and stop orders --------------------------------------------------------
+
+Given(
+  'the train has {int} passenger car(s) and {int} freight car(s)',
+  function (this: SimWorld, p: number, f: number) {
+    this.train.passengerCars = p;
+    this.train.freightCars = f;
+  },
+);
+
+When(
+  "I change the train's cars to {int} passenger car(s) and {int} freight car(s)",
+  function (this: SimWorld, p: number, f: number) {
+    this.run((g) => g.changeCars(this.train.id, { passengerCars: p, freightCars: f }));
+  },
+);
+
+Then(
+  'the train should haul {int} passenger car(s) and {int} freight car(s)',
+  function (this: SimWorld, p: number, f: number) {
+    assert.deepEqual([this.train.passengerCars, this.train.freightCars], [p, f]);
+  },
+);
+
+Then('the train should have no stop orders', function (this: SimWorld) {
+  assert.ok(this.train.stopOrders.every((o) => o === null));
+});
+
+function stopsFromTable(table: DataTable): { stops: Coord[]; orders: (CarCounts | null)[] } {
+  const rows = table.hashes();
+  return {
+    stops: rows.map((r) => parseCoords(r['stop']!)[0]!),
+    orders: rows.map((r) => {
+      const [p, f] = [r['passenger cars']?.trim(), r['freight cars']?.trim()];
+      return p || f ? { passengerCars: Number(p || 0), freightCars: Number(f || 0) } : null;
+    }),
+  };
+}
+
+When('I assign the train these stops:', function (this: SimWorld, table: DataTable) {
+  const { stops, orders } = stopsFromTable(table);
+  this.run((g) => g.setRoute(this.train.id, stops, orders));
+});
+
+Given('the train has these stops:', function (this: SimWorld, table: DataTable) {
+  const { stops, orders } = stopsFromTable(table);
+  const result = this.game.setRoute(this.train.id, stops, orders);
+  assert.ok(result.ok, !result.ok ? result.error : '');
 });
