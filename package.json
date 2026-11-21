@@ -14,11 +14,13 @@
     "test:wip": "NODE_OPTIONS='--import tsx' cucumber-js --profile wip",
     "test": "npm run typecheck && npm run test:unit && npm run test:bdd",
     "lint": "eslint . && prettier --check .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.3.0",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.1",
     "@types/node": "^26.6.6",
     "eslint": "^10.15.0",
     "eslint-config-prettier": "^10.1.8",

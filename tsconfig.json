@@ -13,5 +13,5 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["src", "features", "tests"]
+  "include": ["src", "features", "tests", "e2e", "playwright.config.ts"]
 }

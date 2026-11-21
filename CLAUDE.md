@@ -7,6 +7,8 @@ from existing games. Plan: [docs/PLAN.md](docs/PLAN.md).
 - `npm test`: typecheck, unit tests and BDD (must pass before every commit)
 - `npm run test:bdd`: cucumber scenarios except `@wip`
 - `npm run test:wip`: backlog scenarios that aren't implemented yet
+- `npm run test:e2e`: Playwright UI smoke tests (phone and desktop, uses installed Chrome, starts Vite on :5190).
+  Not part of `npm test`; run it after changing `src/ui`.
 
 ## Rules
 - `src/sim` is pure and deterministic: no DOM, no `Math.random` (use `Rng`), no wall-clock time.
