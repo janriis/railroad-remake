@@ -25,9 +25,12 @@ const total = (world: SimWorld, pick: (y: LedgerYear) => number): number =>
 
 // --- Calendar -------------------------------------------------------------------
 
-Given('the calendar starts on {int} {word} {int}', function (this: SimWorld, day: number, m: string, year: number) {
-  this.game.time = timeOf({ year, month: month(m), day });
-});
+Given(
+  'the calendar starts on {int} {word} {int}',
+  function (this: SimWorld, day: number, m: string, year: number) {
+    this.game.time = timeOf({ year, month: month(m), day });
+  },
+);
 
 When('{int} months pass', function (this: SimWorld, months: number) {
   this.passHours(months * DAYS_PER_MONTH * TICKS_PER_DAY);
@@ -37,9 +40,12 @@ When('{int} years pass', function (this: SimWorld, years: number) {
   this.passHours(years * DAYS_PER_YEAR * TICKS_PER_DAY);
 });
 
-Then('the date should be {int} {word} {int}', function (this: SimWorld, day: number, m: string, year: number) {
-  assert.deepEqual(this.game.date, { year, month: month(m), day });
-});
+Then(
+  'the date should be {int} {word} {int}',
+  function (this: SimWorld, day: number, m: string, year: number) {
+    assert.deepEqual(this.game.date, { year, month: month(m), day });
+  },
+);
 
 // --- Train fixtures -------------------------------------------------------------
 
@@ -60,16 +66,28 @@ Given(
 // --- Running costs --------------------------------------------------------------
 
 Then('the company should have paid {money} in track maintenance', function (this: SimWorld, amount: number) {
-  assert.equal(total(this, (y) => -y.trackMaintenance), amount);
+  assert.equal(
+    total(this, (y) => -y.trackMaintenance),
+    amount,
+  );
 });
 
-Then('the company should have paid {money} in train running costs', function (this: SimWorld, amount: number) {
-  assert.equal(total(this, (y) => -y.trainRunning), amount);
-});
+Then(
+  'the company should have paid {money} in train running costs',
+  function (this: SimWorld, amount: number) {
+    assert.equal(
+      total(this, (y) => -y.trainRunning),
+      amount,
+    );
+  },
+);
 
-Then('the company should have paid {money} in total running costs', function (this: SimWorld, amount: number) {
-  assert.equal(total(this, runningCosts), amount);
-});
+Then(
+  'the company should have paid {money} in total running costs',
+  function (this: SimWorld, amount: number) {
+    assert.equal(total(this, runningCosts), amount);
+  },
+);
 
 Then('the company should be in debt by {money}', function (this: SimWorld, amount: number) {
   assert.equal(this.game.cash, -amount);
@@ -79,9 +97,12 @@ Then('the company should be in debt by {money}', function (this: SimWorld, amoun
 
 const page = (world: SimWorld, year: number): LedgerYear => world.game.ledgerFor(year);
 
-Then('the ledger for {int} should show {money} in cargo income', function (this: SimWorld, year: number, amount: number) {
-  assert.equal(page(this, year).cargoIncome, amount);
-});
+Then(
+  'the ledger for {int} should show {money} in cargo income',
+  function (this: SimWorld, year: number, amount: number) {
+    assert.equal(page(this, year).cargoIncome, amount);
+  },
+);
 
 Then(
   'the ledger for {int} should show {money} in construction expenses',
@@ -90,13 +111,19 @@ Then(
   },
 );
 
-Then('the ledger for {int} should show {money} in running costs', function (this: SimWorld, year: number, amount: number) {
-  assert.equal(runningCosts(page(this, year)), amount);
-});
+Then(
+  'the ledger for {int} should show {money} in running costs',
+  function (this: SimWorld, year: number, amount: number) {
+    assert.equal(runningCosts(page(this, year)), amount);
+  },
+);
 
-Then('the ledger for {int} should show a loss of {money}', function (this: SimWorld, year: number, amount: number) {
-  assert.equal(profit(page(this, year)), -amount);
-});
+Then(
+  'the ledger for {int} should show a loss of {money}',
+  function (this: SimWorld, year: number, amount: number) {
+    assert.equal(profit(page(this, year)), -amount);
+  },
+);
 
 Then('the ledger for {int} should show break-even results', function (this: SimWorld, year: number) {
   assert.equal(profit(page(this, year)), 0);

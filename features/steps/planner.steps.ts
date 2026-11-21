@@ -93,5 +93,8 @@ Then('there is a bridge between {coord} and {coord}', function (this: SimWorld, 
 Then('the suggested route should turn by at most 45 degrees at every tile', function (this: SimWorld) {
   const path = plan(this).path;
   for (let i = 2; i < path.length; i++)
-    assert.ok(smoothAt(path[i - 2]!, path[i - 1]!, path[i]!), `sharp turn at (${path[i - 1]!.x}, ${path[i - 1]!.y})`);
+    assert.ok(
+      smoothAt(path[i - 2]!, path[i - 1]!, path[i]!),
+      `sharp turn at (${path[i - 1]!.x}, ${path[i - 1]!.y})`,
+    );
 });

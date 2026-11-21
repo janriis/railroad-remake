@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { Given, Then, When } from '@cucumber/cucumber';
-import { INDUSTRY, STATION_SIZES, type Cargo, type IndustryKind, type StationSize } from '../../src/sim/config';
+import {
+  INDUSTRY,
+  STATION_SIZES,
+  type Cargo,
+  type IndustryKind,
+  type StationSize,
+} from '../../src/sim/config';
 import type { Industry } from '../../src/sim/cargo';
 import { TOWN_WEIGHT_TOTAL } from '../../src/sim/cargo';
 import type { Station } from '../../src/sim/game';
@@ -53,7 +59,11 @@ Given(
   'a {word} station exists at {coord} covering {string}',
   function (this: SimWorld, size: string, at: Coord, name: string) {
     const s = this.game.addStation(stationSize(size), at);
-    assert.equal(this.game.townCoverage(town(this, name)).get(s), TOWN_WEIGHT_TOTAL, 'station should cover the whole town');
+    assert.equal(
+      this.game.townCoverage(town(this, name)).get(s),
+      TOWN_WEIGHT_TOTAL,
+      'station should cover the whole town',
+    );
   },
 );
 
@@ -71,7 +81,9 @@ Given(
  * station at the far end of the track, and a passenger train shuttling between them.
  */
 Given('the passengers of {string} are being carried away', function (this: SimWorld, name: string) {
-  const from = [...this.game.stations.values()].find((s) => (this.game.townCoverage(town(this, name)).get(s) ?? 0) > 0);
+  const from = [...this.game.stations.values()].find(
+    (s) => (this.game.townCoverage(town(this, name)).get(s) ?? 0) > 0,
+  );
   assert.ok(from, `no station serves "${name}"`);
   const to = { x: from.at.x + 8, y: from.at.y };
   this.game.addTown(`${name} Terminus`, to, 1_000);
@@ -90,9 +102,12 @@ Then(
   },
 );
 
-Then('the town of {string} should have {count} inhabitants', function (this: SimWorld, name: string, n: number) {
-  assert.equal(town(this, name).population, n);
-});
+Then(
+  'the town of {string} should have {count} inhabitants',
+  function (this: SimWorld, name: string, n: number) {
+    assert.equal(town(this, name).population, n);
+  },
+);
 
 Then(
   'the station at {coord} should have {int} {cargo} waiting',
