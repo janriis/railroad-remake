@@ -18,7 +18,7 @@ src/
   sim/      Pure, deterministic game rules. No DOM, no timers, no Math.random.
             map, terrain, track network, stations, trains, cargo, economy, finance, calendar
   game/     (later) Command layer / facade used by both the UI and the BDD steps
-  render/   PixiJS renderer. Reads sim state, never mutates it
+  ui/       Canvas 2D renderer and touch UI. Reads sim state, changes it only through Game commands
   ui/       HUD, panels, build tools (DOM)
   assets/   Generated art (Higgsfield) + manifest
 features/   Gherkin specs + step definitions + World (the BDD test harness)
@@ -34,7 +34,7 @@ Key rules:
   commands give the same game. This also makes save/load and replays cheap.
 - The renderer and UI subscribe to state; they hold no rules.
 
-Stack: TypeScript 5, Vite, PixiJS 8 (from M4), cucumber-js + tsx (BDD), Vitest (unit), Playwright (UI smoke).
+Stack: TypeScript 5, Vite, Canvas 2D (PixiJS dropped 2026-11-21: the canvas renderer copes and sprites draw fine with it), cucumber-js + tsx (BDD), Vitest (unit), Playwright (UI smoke).
 
 ## 3. BDD setup and test harness
 
@@ -73,7 +73,7 @@ npm test            # typecheck + unit + bdd
 | M1 | Map & track | Terrain build costs, diagonals, rejections, bridges, demolish track, map generator (seeded). **Done**, plus an early touch UI (Canvas 2D, procedural art) published as a private claude.ai page for on-the-go testing |
 | M2 | Stations & trains | Station sizes + catchment radius, buy locomotive + cars, route with stops, shortest-path routing over track, movement over time, block signalling with passing loops and deadlock detection, **route planner** (cheapest route between two places; bridges need the player's confirmation). **Done**, playable on the phone page |
 | M3 | Cargo & economy | Cities (passengers, mail), original industry chains (e.g. timber→sawmill→furniture), supply/demand, payment by distance and transit time, running and maintenance costs, monthly/yearly ledger. Also: double track with section signalling, one-off trips to any station. **Sim done** (BDD green); UI in progress |
-| M4 | Rendering & UI | PixiJS map, camera pan/zoom, build tools, train/station panels, Higgsfield assets in place, Playwright smoke |
+| M4 | Rendering & UI | Canvas map, camera pan/zoom, build tools, train/station panels, Higgsfield assets in place, Playwright smoke. **Art direction (2026-11-21): flat vector**, top-down terrain/vehicles with buildings in a slight ¾ view; reference `assets/style-test/flat.jpg` |
 | M5 | Finance | Loans, bonds, company shares, share price, bankruptcy |
 | M6 | Rivals & progression | AI railroads, eras and locomotive tech unlocks, scenarios with win conditions, save/load |
 | M7 | Polish | Audio, balancing pass, performance, tutorial |
