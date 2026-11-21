@@ -8,6 +8,7 @@ import { stepCamAnim } from './camera';
 import { ROSTER_MS, TICK_MS } from './constants';
 import { draw } from './draw';
 import { $ } from './dom';
+import { trackNotices } from './sheets/company';
 
 export function trackIncome(ui: Ui): void {
   const year = ui.game.date.year;
@@ -56,12 +57,13 @@ export function afterTicks(ui: Ui): void {
   ui.updateHud();
   trackIncome(ui);
   trackWear(ui);
+  trackNotices(ui);
   const day = Math.floor(ui.game.time / TICKS_PER_DAY);
   if (day !== ui.lastDay) {
     ui.lastDay = day;
     ui.persist();
     if (
-      (ui.selStation || ui.selIndustry || ui.ledgerOpen) &&
+      (ui.selStation || ui.selIndustry || ui.ledgerOpen || ui.companyOpen) &&
       !ui.routing &&
       !ui.carsEdit &&
       !ui.replacing &&

@@ -59,6 +59,7 @@ function newGame(ui: Ui, saved: SaveData | null): void {
   ui.floaters.length = 0;
   ui.stopCount.clear();
   ui.lastIncome = -1;
+  ui.noticesSeen = null;
   ui.acc = 0;
   ui.lastDay = Math.floor(ui.game.time / TICKS_PER_DAY);
   ui.clearSelection();

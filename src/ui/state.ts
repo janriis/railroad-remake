@@ -5,7 +5,7 @@ import type { Segment } from '../sim/track';
 import type { CarMix } from '../sim/cars';
 import type { Train } from '../sim/trains';
 import type { Coord } from '../sim/types';
-import type { LocoModel } from '../sim/config';
+import { BANKRUPTCY_MONTHS, type LocoModel } from '../sim/config';
 import { MONTHS, SAVE_KEY } from './constants';
 import { $ } from './dom';
 import { money } from './format';
@@ -152,6 +152,9 @@ export class Ui {
   selIndustry: Industry | null = null;
   sendTo: SendState | null = null;
   ledgerOpen = false;
+  companyOpen = false;
+  /** How many game notices have been toasted; null until the first frame of a game. */
+  noticesSeen: number | null = null;
   floaters: Floater[] = [];
   actions: Record<string, () => void> = {};
 
@@ -209,6 +212,15 @@ export class Ui {
       $('cash').textContent = cash;
       this.cashBox.classList.toggle('negative', game.cash < 0);
     }
+    const warn = $('cash-warn');
+    const w =
+      game.negativeMonths > 0
+        ? `Cash negative: ${game.negativeMonths} of ${BANKRUPTCY_MONTHS} months before restructuring`
+        : '';
+    if (warn.textContent !== w) {
+      warn.textContent = w;
+      warn.classList.toggle('hidden', !w);
+    }
     const d = this.dateText();
     if (d !== this.lastDate) {
       this.lastDate = d;
@@ -253,6 +265,7 @@ export class Ui {
     this.selIndustry = null;
     this.sendTo = null;
     this.ledgerOpen = false;
+    this.companyOpen = false;
     this.renderSheet();
     this.renderRoster();
     this.requestDraw();

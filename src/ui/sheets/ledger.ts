@@ -15,6 +15,11 @@ export function renderLedger(ui: Ui): void {
     ['Track maintenance', 'trackMaintenance'],
     ['Train running', 'trainRunning'],
     ['Building upkeep', 'buildingUpkeep'],
+    ['Interest', 'interest'],
+  ];
+  const fin: [string, keyof LedgerYear][] = [
+    ['Financing in', 'financingIn'],
+    ['Financing out', 'financingOut'],
   ];
   const cell = (n: number): string =>
     `<td class="${n < 0 ? 'neg' : n > 0 ? 'pos' : ''}">${n === 0 ? '$0' : signed(n)}</td>`;
@@ -25,10 +30,25 @@ export function renderLedger(ui: Ui): void {
       rows
         .map(([label, k]) => `<tr><th scope="row">${label}</th>${cell(cur[k])}${cell(prev[k])}</tr>`)
         .join('') +
-      `<tr class="total"><th scope="row">Profit / loss</th>${cell(profit(cur))}${cell(profit(prev))}</tr></tbody></table>` +
+      `<tr class="total"><th scope="row">Profit / loss</th>${cell(profit(cur))}${cell(profit(prev))}</tr>` +
+      fin
+        .map(
+          ([label, k]) =>
+            `<tr class="fin-row"><th scope="row">${label}</th>${cell(cur[k])}${cell(prev[k])}</tr>`,
+        )
+        .join('') +
+      `</tbody></table>` +
+      `<div class="sub">Financing (bonds, shares, dividends) is not part of profit.</div>` +
       `<div class="sub">Running costs next month-end: ${money(costs.trackMaintenance + costs.trainRunning)} (track ${money(costs.trackMaintenance)}, trains ${money(costs.trainRunning)})</div>` +
-      `<div class="btns">${btn('close', 'Close')}</div>`,
-    { close: () => ui.clearSelection() },
+      `<div class="btns">${btn('company', 'Company')}${btn('close', 'Close')}</div>`,
+    {
+      company: () => {
+        ui.ledgerOpen = false;
+        ui.companyOpen = true;
+        ui.renderSheet();
+      },
+      close: () => ui.clearSelection(),
+    },
     true,
   );
 }

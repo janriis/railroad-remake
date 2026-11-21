@@ -312,3 +312,40 @@ test('10. Car types: buy a locomotive with a coal hopper and a coach, see both i
   await expect(sheet).toContainText('coal hopper 0/25');
   expect(errors).toEqual([]);
 });
+
+test('M8. Company panel: issue and repay a bond, set a dividend, no horizontal scroll', async ({ page }) => {
+  const errors = await boot(page, fixtureSave());
+  await page.locator('#play').click(); // pause so cash only changes through our clicks
+  const start = await cashOf(page);
+  await page.locator('.cash-box').click();
+  await act(page, 'company').click();
+  await expect(page.locator('#sheet-msg .sheet-title').first()).toHaveText('Company');
+  await expect(page.locator('#sheet-msg')).toContainText('Shares outstanding');
+  await expect(page.locator('#sheet-msg svg.pchart')).toBeVisible();
+
+  await act(page, 'issue-bond').click();
+  await expect.poll(() => cashOf(page)).toBe(start + 100_000);
+  await expect(page.locator('#sheet-msg')).toContainText('$100,000 at 5%');
+  await expect(page.locator('#sheet-msg')).toContainText('debt $100,000');
+
+  await act(page, 'repay-bond').click();
+  await expect.poll(() => cashOf(page)).toBe(start);
+  await expect(page.locator('#sheet-msg')).toContainText('No bonds outstanding');
+  await expect(act(page, 'repay-bond')).toBeDisabled();
+
+  await act(page, 'div-p5').click();
+  await act(page, 'div-p1').click();
+  await expect(page.locator('#div-val')).toHaveText('$0.06');
+  await expect(page.locator('#sheet-msg')).toContainText('Year-end total $6,000, your part $2,400');
+  expect(await page.evaluate(() => window.railroadsim!.game.dividendCents)).toBe(6);
+
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+  expect(overflow, 'no horizontal scroll').toBe(true);
+  const sb = (await page.locator('#sheet').boundingBox())!;
+  const tb = (await page.locator('#toolbar').boundingBox())!;
+  expect(sb.y + sb.height).toBeLessThanOrEqual(tb.y + 1);
+
+  await act(page, 'close').click();
+  await expect(page.locator('#sheet')).toBeHidden();
+  expect(errors).toEqual([]);
+});

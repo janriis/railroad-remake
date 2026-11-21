@@ -5,6 +5,7 @@ import { renderTrackSheet } from '../tools/track';
 import { renderBuy } from '../tools/train';
 import { renderCarsSheet } from './cars';
 import { renderIndustryInfo, renderStationInfo } from './info';
+import { renderCompany } from './company';
 import { renderLedger } from './ledger';
 import { renderPicking, renderRouteEditor } from './route';
 import { renderReplaceSheet, renderRetireSheet } from './replace';
@@ -32,6 +33,10 @@ export function renderSheet(ui: Ui): void {
   }
   if (ui.sendTo) {
     renderSendSheet(ui);
+    return;
+  }
+  if (ui.companyOpen) {
+    renderCompany(ui);
     return;
   }
   if (ui.ledgerOpen) {
