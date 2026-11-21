@@ -31,8 +31,11 @@ export interface Train {
   boughtAt: number;
   /** Broken down until this game hour; it stands still and keeps its place on the line. */
   brokenUntil: number | null;
+  /** Cars coupled right now (carry cargo). */
   passengerCars: number;
   freightCars: number;
+  /** Cars the train owns; stop orders couple any number of them, the rest ride along as spares. */
+  owned: CarCounts;
   route: Coord[];
   /** Per stop (same index as `route`): the cars to leave that stop with, or null to keep them. */
   stopOrders: (CarCounts | null)[];

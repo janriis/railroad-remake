@@ -8,7 +8,7 @@ import { maxCarsOf } from '../models';
 export function beginCars(ui: Ui, train: Train): void {
   ui.clearSelection();
   ui.selTrainId = train.id;
-  ui.carsEdit = { trainId: train.id, passengerCars: train.passengerCars, freightCars: train.freightCars };
+  ui.carsEdit = { trainId: train.id, ...train.owned };
   ui.renderSheet();
   ui.renderRoster();
   ui.requestDraw();
@@ -17,8 +17,8 @@ export function renderCarsSheet(ui: Ui): void {
   const c = ui.carsEdit!;
   const train = ui.game.train(c.trainId);
   if (!train) return;
-  const dp = c.passengerCars - train.passengerCars;
-  const df = c.freightCars - train.freightCars;
+  const dp = c.passengerCars - train.owned.passengerCars;
+  const df = c.freightCars - train.owned.freightCars;
   const price = (n: number, unit: number) => (n > 0 ? n * unit : Math.round(n * unit * CAR_RESALE_RATE));
   const cost = price(dp, PASSENGER_CAR_COST) + price(df, FREIGHT_CAR_COST);
   const added = Math.max(dp, 0) + Math.max(df, 0);
@@ -32,7 +32,8 @@ export function renderCarsSheet(ui: Ui): void {
   const max = maxCarsOf(train.model);
   const broke = cost > ui.game.cash;
   const dropsOrders =
-    total !== train.passengerCars + train.freightCars && train.stopOrders.some((o) => o !== null);
+    total < train.owned.passengerCars + train.owned.freightCars &&
+    train.stopOrders.some((o) => o !== null && o.passengerCars + o.freightCars > total);
   const row = (label: string, key: 'pass' | 'freight', n: number) =>
     `<div class="stepper"><span>${label}</span><span class="ctl">
         <button type="button" data-act="${key}-" aria-label="Fewer ${label}"${n === 0 ? ' disabled' : ''}>−</button>
@@ -50,9 +51,7 @@ export function renderCarsSheet(ui: Ui): void {
       row('Passenger cars', 'pass', c.passengerCars) +
       row('Freight cars', 'freight', c.freightCars) +
       `<div class="big" id="cars-price">${line}</div>` +
-      (dropsOrders
-        ? '<div class="warn">Changing the number of cars clears the per-stop car orders.</div>'
-        : '') +
+      (dropsOrders ? '<div class="warn">Stop orders that use more cars than this are cleared.</div>' : '') +
       (broke ? `<div class="err">Not enough cash: you have ${money(ui.game.cash)}.</div>` : '') +
       `<div class="btns">${btn('cancel', 'Cancel')}${btn('apply', 'Apply', 'primary', broke || (dp === 0 && df === 0))}</div>`,
     {

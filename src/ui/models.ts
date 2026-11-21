@@ -34,10 +34,10 @@ export interface ReplacePreview {
 /** Mirrors `Game.replaceLocomotive`: passenger cars are kept first, extras are sold at the resale rate. */
 export function replacePreview(game: Game, t: Train, model: LocoModel): ReplacePreview {
   const max = LOCO[model].maxCars;
-  const passengerCars = Math.min(t.passengerCars, max);
-  const freightCars = Math.min(t.freightCars, max - passengerCars);
-  const soldPassenger = t.passengerCars - passengerCars;
-  const soldFreight = t.freightCars - freightCars;
+  const passengerCars = Math.min(t.owned.passengerCars, max);
+  const freightCars = Math.min(t.owned.freightCars, max - passengerCars);
+  const soldPassenger = t.owned.passengerCars - passengerCars;
+  const soldFreight = t.owned.freightCars - freightCars;
   const resale =
     Math.round(soldPassenger * PASSENGER_CAR_COST * CAR_RESALE_RATE) +
     Math.round(soldFreight * FREIGHT_CAR_COST * CAR_RESALE_RATE);
@@ -71,7 +71,7 @@ export function modelCard(model: LocoModel, selected: boolean, extra = ''): stri
 export function retireRefund(game: Game, t: Train): number {
   return (
     game.tradeInValue(t) +
-    Math.round(t.passengerCars * PASSENGER_CAR_COST * CAR_RESALE_RATE) +
-    Math.round(t.freightCars * FREIGHT_CAR_COST * CAR_RESALE_RATE)
+    Math.round(t.owned.passengerCars * PASSENGER_CAR_COST * CAR_RESALE_RATE) +
+    Math.round(t.owned.freightCars * FREIGHT_CAR_COST * CAR_RESALE_RATE)
   );
 }

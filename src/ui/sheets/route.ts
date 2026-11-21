@@ -22,7 +22,7 @@ export function renderRouteEditor(ui: Ui): void {
   const r = ui.routing!;
   const train = ui.game.train(r.trainId);
   if (!train) return;
-  const owned = train.passengerCars + train.freightCars;
+  const owned = train.owned.passengerCars + train.owned.freightCars;
   const n = r.stops.length;
   const acts: Record<string, () => void> = {
     cancel: () => cancelRouting(ui),
@@ -92,17 +92,23 @@ export function renderRouteEditor(ui: Ui): void {
       r.orders[i] = null;
     });
     acts[`split-${i}`] = edit(() => {
-      r.orders[i] = { passengerCars: train.passengerCars, freightCars: train.freightCars };
+      r.orders[i] = { ...train.owned };
     });
-    const setP = (p: number) =>
+    acts[`none-${i}`] = edit(() => {
+      r.orders[i] = { passengerCars: 0, freightCars: 0 };
+    });
+    // Any mix up to the cars the train owns; the rest ride along as spares.
+    const set = (p: number, f: number) =>
       edit(() => {
         const q = Math.max(0, Math.min(owned, p));
-        r.orders[i] = { passengerCars: q, freightCars: owned - q };
+        r.orders[i] = { passengerCars: q, freightCars: Math.max(0, Math.min(owned - q, f)) };
       });
-    acts[`p--${i}`] = setP((o?.passengerCars ?? 0) - 1);
-    acts[`p+-${i}`] = setP((o?.passengerCars ?? 0) + 1);
-    acts[`f--${i}`] = setP((o?.passengerCars ?? 0) + 1);
-    acts[`f+-${i}`] = setP((o?.passengerCars ?? 0) - 1);
+    const op = o?.passengerCars ?? 0;
+    const of = o?.freightCars ?? 0;
+    acts[`p--${i}`] = set(op - 1, of);
+    acts[`p+-${i}`] = set(op + 1, of);
+    acts[`f--${i}`] = set(op, of - 1);
+    acts[`f+-${i}`] = set(op, of + 1);
     let cars: string;
     if (owned === 0) cars = '<div class="sub">This train has no cars to arrange.</div>';
     else {
@@ -110,15 +116,21 @@ export function renderRouteEditor(ui: Ui): void {
         `<div class="seg" role="group" aria-label="Cars at ${name}">` +
         `<button type="button" class="segbtn${o ? '' : ' on'}" data-act="keep-${i}" aria-pressed="${!o}">Keep cars</button>` +
         `<button type="button" class="segbtn${o ? ' on' : ''}" data-act="split-${i}" aria-pressed="${!!o}">Set cars here</button></div>`;
+      const none = !!o && o.passengerCars + o.freightCars === 0;
       if (o) {
         const st = (label: string, dnAct: string, upAct: string, n2: number, dn: boolean, up: boolean) =>
           `<div class="stepper"><span>${label}</span><span class="ctl">` +
           `<button type="button" data-act="${dnAct}-${i}" aria-label="Fewer ${label} at ${name}"${dn ? '' : ' disabled'}>−</button>` +
           `<output>${n2}</output>` +
           `<button type="button" data-act="${upAct}-${i}" aria-label="More ${label} at ${name}"${up ? '' : ' disabled'}>+</button></span></div>`;
+        const room = o.passengerCars + o.freightCars < owned;
+        const spare = owned - o.passengerCars - o.freightCars;
         cars +=
-          st('Passenger', 'p-', 'p+', o.passengerCars, o.passengerCars > 0, o.passengerCars < owned) +
-          st('Freight', 'f-', 'f+', o.freightCars, o.freightCars > 0, o.freightCars < owned);
+          st('Passenger', 'p-', 'p+', o.passengerCars, o.passengerCars > 0, room) +
+          st('Freight', 'f-', 'f+', o.freightCars, o.freightCars > 0, room) +
+          `<div class="sub">${none ? 'The locomotive runs alone from here.' : spare > 0 ? `${spare} spare car${spare === 1 ? '' : 's'} ride along uncoupled.` : 'All cars coupled.'}` +
+          (none ? '' : ` <button type="button" class="mini txt" data-act="none-${i}">No cars</button>`) +
+          '</div>';
       }
     }
     list +=

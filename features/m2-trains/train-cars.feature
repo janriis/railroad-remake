@@ -5,7 +5,10 @@ Feature: Changing a train's cars
   So that each train carries what its route needs
 
   Adding a car costs its price (passenger $10,000, freight $8,000). Taking a car off pays back half.
-  A stop order swaps the train's own cars between types at that stop, for free; the number of cars stays the same.
+  A stop order sets which of the train's own cars are coupled from that stop on: any mix of passenger and
+  freight cars up to the number the train owns, or none at all (the locomotive runs alone). Swapping types
+  is free. Cars that are not coupled stay with the train as spares and still cost their running cost;
+  only coupled cars carry cargo.
 
   Background:
     Given a new game on a 20x20 map of plains
@@ -64,13 +67,48 @@ Feature: Changing a train's cars
     And 8 days pass
     Then the train should haul 1 passenger car and 1 freight car
 
-  Scenario: A stop order must use exactly the train's cars
+  Scenario: A stop order cannot use more cars than the train owns
     Given the train has 2 passenger cars and 0 freight cars
     When I assign the train these stops:
       | stop    | passenger cars | freight cars |
       | (2, 5)  | 3              | 0            |
       | (18, 5) |                |              |
-    Then the command is rejected with "a stop order must use the train's 2 cars"
+    Then the command is rejected with "a stop order can use at most the train's 2 cars"
+
+  # The train starts at (2, 5) and first calls at (18, 5) on day 4, where it uncouples its cars; it is back
+  # at (2, 5) on day 8 and couples both again.
+  Scenario: A train can leave a station without cars
+    Given the train has 2 passenger cars and 0 freight cars
+    When I assign the train these stops:
+      | stop    | passenger cars | freight cars |
+      | (2, 5)  | 2              | 0            |
+      | (18, 5) | 0              | 0            |
+    Then the command succeeds
+    When 6 days pass
+    Then the train should haul 0 passenger cars and 0 freight cars
+    And the train should own 2 cars
+    When 4 days pass
+    Then the train should haul 2 passenger cars and 0 freight cars
+
+  # Owned cars cost $200 a month whether coupled or not: $2,000 locomotive + 2 x $200 = $2,400.
+  Scenario: Spare cars still cost their running cost
+    Given the train has 2 passenger cars and 0 freight cars
+    And the train has these stops:
+      | stop    | passenger cars | freight cars |
+      | (2, 5)  | 0              | 0            |
+      | (18, 5) | 2              | 0            |
+    When 1 months pass
+    Then the company should have paid $2,400 in train running costs
+
+  Scenario: A train running without cars carries nothing
+    Given the town "Alder" with 1,000 inhabitants exists at (2, 5)
+    And the train has 2 passenger cars and 0 freight cars
+    And the train has these stops:
+      | stop    | passenger cars | freight cars |
+      | (2, 5)  | 0              | 0            |
+      | (18, 5) | 2              | 0            |
+    When 35 days pass
+    Then the train should be carrying no cargo
 
   Scenario: Changing how many cars a train owns drops orders that no longer fit
     Given the train has 2 passenger cars and 0 freight cars
@@ -78,5 +116,5 @@ Feature: Changing a train's cars
       | stop    | passenger cars | freight cars |
       | (2, 5)  | 2              | 0            |
       | (18, 5) | 0              | 2            |
-    When I change the train's cars to 3 passenger cars and 0 freight cars
+    When I change the train's cars to 1 passenger car and 0 freight cars
     Then the train should have no stop orders

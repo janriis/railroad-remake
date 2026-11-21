@@ -137,6 +137,7 @@ export interface SaveData {
     stopOrders?: (CarCounts | null)[];
     target: number;
     cargo?: Lot[];
+    owned?: CarCounts;
     trip?: Coord | null;
     lastStop?: Coord | null;
     /** Tile it came from, so it keeps facing the same way after loading. */
@@ -460,6 +461,7 @@ export class Game {
       brokenUntil: null,
       passengerCars: opts.passengerCars ?? 0,
       freightCars: opts.freightCars ?? 0,
+      owned: { passengerCars: opts.passengerCars ?? 0, freightCars: opts.freightCars ?? 0 },
       route: [],
       stopOrders: [],
       target: 0,
@@ -499,12 +501,12 @@ export class Game {
       const next = stops[(i + 1) % stops.length]!;
       if (next.x === stops[i]!.x && next.y === stops[i]!.y) return fail('consecutive stops must differ');
     }
-    const owned = train.passengerCars + train.freightCars;
+    const owned = carCount(train.owned);
     for (const order of orders) {
       if (!order) continue;
       if (order.passengerCars < 0 || order.freightCars < 0) return fail('car counts cannot be negative');
-      if (order.passengerCars + order.freightCars !== owned)
-        return fail(`a stop order must use the train's ${owned} cars`);
+      if (order.passengerCars + order.freightCars > owned)
+        return fail(`a stop order can use at most the train's ${owned} cars`);
     }
     const legs: [Coord, Coord][] = [[train.at, stops[0]!]];
     for (let i = 1; i < stops.length; i++) legs.push([stops[i - 1]!, stops[i]!]);
@@ -529,16 +531,15 @@ export class Game {
     if (cars.passengerCars + cars.freightCars > LOCO[train.model].maxCars) return fail('too many cars');
     const price = (n: number, unit: number) => (n > 0 ? n * unit : Math.round(n * unit * CAR_RESALE_RATE));
     const cost =
-      price(cars.passengerCars - train.passengerCars, PASSENGER_CAR_COST) +
-      price(cars.freightCars - train.freightCars, FREIGHT_CAR_COST);
+      price(cars.passengerCars - train.owned.passengerCars, PASSENGER_CAR_COST) +
+      price(cars.freightCars - train.owned.freightCars, FREIGHT_CAR_COST);
     if (cost > this.cash) return fail('insufficient funds');
     train.passengerCars = cars.passengerCars;
     train.freightCars = cars.freightCars;
+    train.owned = { ...cars };
     trimToCapacity(train);
-    const owned = cars.passengerCars + cars.freightCars;
-    train.stopOrders = train.stopOrders.map((o) =>
-      o && o.passengerCars + o.freightCars === owned ? o : null,
-    );
+    const owned = carCount(cars);
+    train.stopOrders = train.stopOrders.map((o) => (o && carCount(o) <= owned ? o : null));
     this.spend(cost, 'rollingStock');
     return ok(cost);
   }
@@ -939,8 +940,8 @@ export class Game {
     if (!this.atStation(train)) return fail('train must be at a station');
     const refund =
       this.tradeInValue(train) +
-      Math.round(train.passengerCars * PASSENGER_CAR_COST * CAR_RESALE_RATE) +
-      Math.round(train.freightCars * FREIGHT_CAR_COST * CAR_RESALE_RATE);
+      Math.round(train.owned.passengerCars * PASSENGER_CAR_COST * CAR_RESALE_RATE) +
+      Math.round(train.owned.freightCars * FREIGHT_CAR_COST * CAR_RESALE_RATE);
     this.trains.splice(this.trains.indexOf(train), 1);
     this.spend(-refund, 'rollingStock');
     return ok(-refund);
@@ -963,24 +964,23 @@ export class Game {
     if (!this.atStation(train)) return fail('train must be at a station');
     if (!this.onSale(model)) return fail('model not on sale');
     const max = LOCO[model].maxCars;
-    const passengerCars = Math.min(train.passengerCars, max);
-    const freightCars = Math.min(train.freightCars, max - passengerCars);
+    const passengerCars = Math.min(train.owned.passengerCars, max);
+    const freightCars = Math.min(train.owned.freightCars, max - passengerCars);
     const resale =
-      Math.round((train.passengerCars - passengerCars) * PASSENGER_CAR_COST * CAR_RESALE_RATE) +
-      Math.round((train.freightCars - freightCars) * FREIGHT_CAR_COST * CAR_RESALE_RATE);
+      Math.round((train.owned.passengerCars - passengerCars) * PASSENGER_CAR_COST * CAR_RESALE_RATE) +
+      Math.round((train.owned.freightCars - freightCars) * FREIGHT_CAR_COST * CAR_RESALE_RATE);
     const cost = LOCO[model].price - this.tradeInValue(train) - resale;
     if (cost > this.cash) return fail('insufficient funds');
     train.model = model;
     train.boughtAt = this.time;
     train.speed = unitsPerTick(LOCO[model].tilesPerDay);
-    if (passengerCars !== train.passengerCars || freightCars !== train.freightCars) {
+    if (passengerCars !== train.owned.passengerCars || freightCars !== train.owned.freightCars) {
+      train.owned = { passengerCars, freightCars };
       train.passengerCars = passengerCars;
       train.freightCars = freightCars;
       trimToCapacity(train);
       const owned = passengerCars + freightCars;
-      train.stopOrders = train.stopOrders.map((o) =>
-        o && o.passengerCars + o.freightCars === owned ? o : null,
-      );
+      train.stopOrders = train.stopOrders.map((o) => (o && carCount(o) <= owned ? o : null));
     }
     this.spend(cost, 'rollingStock');
     return ok(cost);
@@ -1000,7 +1000,7 @@ export class Game {
 
   /** What next month-end will charge, by category. */
   monthlyRunningCosts(): { trackMaintenance: number; trainRunning: number } {
-    const cars = this.trains.reduce((n, t) => n + t.passengerCars + t.freightCars, 0);
+    const cars = this.trains.reduce((n, t) => n + carCount(t.owned), 0);
     return {
       trackMaintenance: this.track.lineCount * TRACK_MAINTENANCE_PER_SEGMENT,
       trainRunning: this.trains.reduce((n, t) => n + this.locoRunningCost(t), 0) + cars * CAR_RUNNING_COST,
@@ -1063,6 +1063,7 @@ export class Game {
         tilesPerDay: (t.speed * TICKS_PER_DAY) / TILE_UNITS,
         passengerCars: t.passengerCars,
         freightCars: t.freightCars,
+        owned: t.owned,
         route: t.route,
         stopOrders: t.stopOrders,
         target: t.target,
@@ -1117,6 +1118,7 @@ export class Game {
       train.stopOrders = t.stopOrders ?? t.route.map(() => null);
       train.target = t.target;
       train.cargo = t.cargo ?? [];
+      train.owned = t.owned ?? { passengerCars: t.passengerCars, freightCars: t.freightCars };
       train.trip = t.trip ?? null;
       train.lastStop = t.lastStop ?? null;
       train.prev = t.prev ?? null;
@@ -1168,3 +1170,5 @@ function trimToCapacity(train: Train): void {
 /** Consecutive tile pairs of a path. */
 const pairs = (path: readonly Coord[]): [Coord, Coord][] =>
   path.slice(1).map((c, i) => [path[i]!, c] as [Coord, Coord]);
+
+const carCount = (c: CarCounts): number => c.passengerCars + c.freightCars;

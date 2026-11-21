@@ -186,8 +186,17 @@ Given(
   function (this: SimWorld, p: number, f: number) {
     this.train.passengerCars = p;
     this.train.freightCars = f;
+    this.train.owned = { passengerCars: p, freightCars: f };
   },
 );
+
+Then('the train should own {int} car(s)', function (this: SimWorld, n: number) {
+  assert.equal(this.train.owned.passengerCars + this.train.owned.freightCars, n);
+});
+
+Then('the train should be carrying no cargo', function (this: SimWorld) {
+  assert.deepEqual(this.train.cargo, []);
+});
 
 When(
   "I change the train's cars to {int} passenger car(s) and {int} freight car(s)",

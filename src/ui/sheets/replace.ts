@@ -139,7 +139,7 @@ export function renderRetireSheet(ui: Ui): void {
   const cargo = loadText(train) && train.cargo.some((l) => l.units > 0);
   ui.setSheet(
     `<div class="sheet-title">Retire ${trainName(ui, train)}?</div>` +
-      `<div class="info">The ${LOCO[train.model].name} and its ${plural(train.passengerCars + train.freightCars, 'car')} are sold for <b>${money(refund)}</b>.</div>` +
+      `<div class="info">The ${LOCO[train.model].name} and its ${plural(train.owned.passengerCars + train.owned.freightCars, 'car')} are sold for <b>${money(refund)}</b>.</div>` +
       (cargo ? `<div class="warn">The cargo on board (${cargoBreakdown(train)}) is lost.</div>` : '') +
       `<div class="btns">${btn('back', 'Keep it')}${btn('retire', `Retire for ${money(refund)}`, 'primary')}</div>`,
     {
