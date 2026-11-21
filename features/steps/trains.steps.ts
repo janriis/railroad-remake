@@ -95,6 +95,10 @@ Given(
   },
 );
 
+Given('a train exists at {coord} with the route {}', function (this: SimWorld, at: Coord, route: string) {
+  addTrain(this, at, route);
+});
+
 Given(
   'a slow train exists at {coord} with the route {}',
   function (this: SimWorld, at: Coord, route: string) {
@@ -149,6 +153,10 @@ Then('the following train should have left its first stop', function (this: SimW
 });
 
 Then('no segment should have held two trains at once', function (this: SimWorld) {
+  assert.deepEqual(this.violations, []);
+});
+
+Then('no line should have held two trains at once', function (this: SimWorld) {
   assert.deepEqual(this.violations, []);
 });
 

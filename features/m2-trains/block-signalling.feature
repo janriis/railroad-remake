@@ -6,6 +6,8 @@ Feature: Block signalling
 
   Each track segment is a block. A moving train holds its segment and the tiles at both ends;
   station tiles can hold several trains. A train waits when the way ahead is taken.
+  Stations, double-track tiles and junctions are passing places: a train leaving one does not
+  enter the single track ahead while a train coming the other way is on it.
   Every scenario also checks, hour by hour, that no segment ever held two trains.
 
   Background:
@@ -41,9 +43,17 @@ Feature: Block signalling
     And both trains should have completed a journey
     And no train should be deadlocked
 
-  Scenario: Head-on trains on single track are reported as deadlocked
+  Scenario: A train waits at its station while an opposing train is on the single track ahead
     Given a train exists at the station at (2, 5) with the route (2, 5), (18, 5)
     And a train exists at the station at (18, 5) with the route (18, 5), (2, 5)
+    When 10 days pass
+    Then both trains should have completed a journey
+    And no train should be deadlocked
+    And no segment should have held two trains at once
+
+  Scenario: Head-on trains already on the same single track are reported as deadlocked
+    Given a train exists at (6, 5) with the route (18, 5), (2, 5)
+    And a train exists at (14, 5) with the route (2, 5), (18, 5)
     When 10 days pass
     Then the trains should be reported as deadlocked
     And no segment should have held two trains at once

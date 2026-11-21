@@ -93,7 +93,7 @@ export interface SaveData {
   readonly cash: number;
   readonly time: number;
   readonly ledger?: ({ year: number } & Partial<LedgerYear>)[];
-  readonly segments: { a: Coord; b: Coord; bridge: boolean }[];
+  readonly segments: { a: Coord; b: Coord; bridge: boolean; double?: boolean }[];
   readonly stations: { at: Coord; size: StationSize }[];
   readonly trains: {
     at: Coord;
@@ -258,8 +258,50 @@ export class Game {
   demolishRefund(a: Coord, b: Coord): number {
     const seg = this.track.get(a, b);
     if (!seg) return 0;
-    const buildCost = seg.bridge ? BRIDGE_SEGMENT_COST : this.segmentCost(a, b);
-    return typeof buildCost === 'number' ? Math.round(buildCost * DEMOLISH_REFUND_RATE) : 0;
+    const buildCost = this.lineCost(a, b);
+    const lines = seg.double ? 2 : 1;
+    return typeof buildCost === 'number' ? lines * Math.round(buildCost * DEMOLISH_REFUND_RATE) : 0;
+  }
+
+  /** What one line of an existing segment would cost to build today. */
+  private lineCost(a: Coord, b: Coord): number | string {
+    return this.track.get(a, b)?.bridge ? BRIDGE_SEGMENT_COST : this.segmentCost(a, b);
+  }
+
+  /** The existing track a doubling from `from` to `to` would follow, or why there is none. */
+  doublingPath(from: Coord, to: Coord): Coord[] | string {
+    const path = findTrackPath(this.track, from, to);
+    if (!path || path.length < 2) return `no track connects ${fmt(from)} and ${fmt(to)}`;
+    return path;
+  }
+
+  /** Price of doubling the single segments along the existing track between two tiles. */
+  quoteDoubleTrack(from: Coord, to: Coord): CommandResult {
+    const path = this.doublingPath(from, to);
+    if (typeof path === 'string') return fail(path);
+    let total = 0;
+    let single = 0;
+    for (let i = 1; i < path.length; i++) {
+      const [a, b] = [path[i - 1]!, path[i]!];
+      if (this.track.isDouble(a, b)) continue;
+      const cost = this.lineCost(a, b);
+      if (typeof cost === 'string') return fail(cost);
+      total += cost;
+      single++;
+    }
+    if (single === 0) return fail('already double track');
+    return ok(total);
+  }
+
+  /** Upgrade the existing track between two tiles to double track. */
+  doubleTrack(from: Coord, to: Coord): CommandResult {
+    const quote = this.quoteDoubleTrack(from, to);
+    if (!quote.ok) return quote;
+    if (quote.cost > this.cash) return fail('insufficient funds');
+    const path = this.doublingPath(from, to) as Coord[];
+    for (let i = 1; i < path.length; i++) this.track.get(path[i - 1]!, path[i]!)!.double = true;
+    this.spend(quote.cost, 'construction');
+    return quote;
   }
 
   /** Tear up every existing segment on the straight line from `from` to `to`. */
@@ -606,7 +648,7 @@ export class Game {
   monthlyRunningCosts(): { trackMaintenance: number; trainRunning: number } {
     const cars = this.trains.reduce((n, t) => n + t.passengerCars + t.freightCars, 0);
     return {
-      trackMaintenance: this.track.segmentCount * TRACK_MAINTENANCE_PER_SEGMENT,
+      trackMaintenance: this.track.lineCount * TRACK_MAINTENANCE_PER_SEGMENT,
       trainRunning: this.trains.length * LOCOMOTIVE_RUNNING_COST + cars * CAR_RUNNING_COST,
     };
   }
@@ -652,7 +694,7 @@ export class Game {
       cash: this.cash,
       time: this.time,
       ledger: [...this.ledger].map(([year, page]) => ({ year, ...page })),
-      segments: [...this.track.segments()].map((s) => ({ a: s.a, b: s.b, bridge: s.bridge })),
+      segments: [...this.track.segments()].map((s) => ({ a: s.a, b: s.b, bridge: s.bridge, ...(s.double ? { double: true } : {}) })),
       stations: [...this.stations.values()].map((s) => ({ at: s.at, size: s.size })),
       trains: this.trains.map((t) => ({
         at: t.at,
@@ -680,7 +722,7 @@ export class Game {
     game.cash = save.cash;
     game.time = save.time;
     for (const { year, ...page } of save.ledger ?? []) game.ledger.set(year, { ...emptyLedgerYear(), ...page });
-    for (const s of save.segments) game.track.add(s.a, s.b, s.bridge);
+    for (const s of save.segments) game.track.add(s.a, s.b, s.bridge, s.double ?? false);
     save.towns?.forEach((t, i) => Object.assign(game.towns[i]!, t));
     if (save.industries) {
       game.industries.length = 0;

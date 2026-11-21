@@ -4,6 +4,8 @@ export interface Segment {
   readonly a: Coord;
   readonly b: Coord;
   readonly bridge: boolean;
+  /** Double track: one line per direction. */
+  double: boolean;
 }
 
 const NEIGHBOR_OFFSETS: readonly [number, number][] = [
@@ -34,8 +36,28 @@ export class TrackNetwork {
     return this.segs.get(TrackNetwork.segmentKey(a, b));
   }
 
-  add(a: Coord, b: Coord, bridge = false): void {
-    this.segs.set(TrackNetwork.segmentKey(a, b), { a, b, bridge });
+  add(a: Coord, b: Coord, bridge = false, double = false): void {
+    this.segs.set(TrackNetwork.segmentKey(a, b), { a, b, bridge, double });
+  }
+
+  isDouble(a: Coord, b: Coord): boolean {
+    return this.get(a, b)?.double ?? false;
+  }
+
+  /**
+   * A tile in the middle of a plain double line (at most two segments, both double).
+   * Trains on different lines may share it; junctions and line ends stay exclusive.
+   */
+  isDoubleTile(c: Coord): boolean {
+    const ns = this.neighbors(c);
+    return ns.length > 0 && ns.length <= 2 && ns.every((n) => this.isDouble(c, n));
+  }
+
+  /** Lines of track: a double segment counts twice. */
+  get lineCount(): number {
+    let n = 0;
+    for (const s of this.segs.values()) n += s.double ? 2 : 1;
+    return n;
   }
 
   remove(a: Coord, b: Coord): void {

@@ -49,7 +49,7 @@ export class SimWorld extends World {
     return t;
   }
 
-  /** Advance time hour by hour, checking that trains never share a segment or a plain tile. */
+  /** Advance time hour by hour, checking that trains never share a line of track or a plain tile. */
   passHours(hours: number): void {
     for (let h = 0; h < hours; h++) {
       this.game.tick();
@@ -57,13 +57,16 @@ export class SimWorld extends World {
       const tiles = new Map<string, number>();
       for (const t of this.game.trains) {
         if (t.next) {
-          const key = TrackNetwork.segmentKey(t.at, t.next);
+          // On double track each direction is its own line.
+          const key = this.game.track.isDouble(t.at, t.next)
+            ? `${coordKey(t.at)}>${coordKey(t.next)}`
+            : TrackNetwork.segmentKey(t.at, t.next);
           if (segments.has(key))
             this.violations.push(`hour ${this.game.time}: trains ${segments.get(key)} and ${t.id} on ${key}`);
           segments.set(key, t.id);
         }
         for (const c of t.next ? [t.at, t.next] : [t.at]) {
-          if (this.game.isStation(c)) continue;
+          if (this.game.isStation(c) || this.game.track.isDoubleTile(c)) continue;
           const key = coordKey(c);
           const other = tiles.get(key);
           if (other !== undefined && other !== t.id)

@@ -21,6 +21,21 @@ Given('existing track from {coord} to {coord}', function (this: SimWorld, from: 
   for (let i = 1; i < path.length; i++) this.game.track.add(path[i - 1]!, path[i]!);
 });
 
+Given('existing double track from {coord} to {coord}', function (this: SimWorld, from: Coord, to: Coord) {
+  const path = line(from, to);
+  for (let i = 1; i < path.length; i++) this.game.track.add(path[i - 1]!, path[i]!, false, true);
+});
+
+When('I double the track from {coord} to {coord}', function (this: SimWorld, from: Coord, to: Coord) {
+  this.run((g) => g.doubleTrack(from, to));
+});
+
+Then('the track from {coord} to {coord} should be double', function (this: SimWorld, from: Coord, to: Coord) {
+  const path = this.game.doublingPath(from, to);
+  assert.ok(typeof path !== 'string', path as string);
+  for (let i = 1; i < path.length; i++) assert.ok(this.game.track.isDouble(path[i - 1]!, path[i]!));
+});
+
 When('I build track from {coord} to {coord}', function (this: SimWorld, from: Coord, to: Coord) {
   this.run((g) => g.buildTrack(line(from, to)));
 });

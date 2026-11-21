@@ -114,7 +114,7 @@ function tryDepart(ctx: MovementContext, t: Train): boolean {
   }
   t.plan = path.slice(1);
   const next = t.plan[0]!;
-  const blocker = blockerFor(ctx, t, next);
+  const blocker = blockerFor(ctx, t, next) ?? opposingInSection(ctx, t);
   if (blocker !== null) {
     setWaiting(t, blocker);
     return false;
@@ -145,19 +145,73 @@ function planPath(ctx: MovementContext, t: Train, dest: Coord): Coord[] | null {
     for (let i = 1; i < tiles.length; i++) opposing.add(`${coordKey(tiles[i]!)}>${coordKey(tiles[i - 1]!)}`);
   }
   const penalty = OPPOSING_TRAFFIC_PENALTY_TILES * TILE_UNITS;
-  const extraCost = (a: Coord, b: Coord) => (opposing.has(`${coordKey(a)}>${coordKey(b)}`) ? penalty : 0);
+  const extraCost = (a: Coord, b: Coord) =>
+    !ctx.track.isDouble(a, b) && opposing.has(`${coordKey(a)}>${coordKey(b)}`) ? penalty : 0;
   return (
     findTrackPath(ctx.track, t.at, dest, { extraCost, forbidFirst: t.prev }) ??
     findTrackPath(ctx.track, t.at, dest, { extraCost })
   );
 }
 
+/**
+ * Who stops `t` from moving onto tile `n`. A segment is one block; on double track each
+ * direction is its own block. Tiles are exclusive except stations and plain double-line tiles.
+ */
 function blockerFor(ctx: MovementContext, t: Train, n: Coord): number | null {
-  const shared = ctx.isStation(n);
+  const double = ctx.track.isDouble(t.at, n);
+  const station = ctx.isStation(n);
+  const shared = station || ctx.track.isDoubleTile(n);
   for (const o of ctx.trains) {
     if (o === t) continue;
-    if (o.next && sameSegment(o.at, o.next, t.at, n)) return o.id;
-    if (!shared && (sameCoord(o.at, n) || (o.next !== null && sameCoord(o.next, n)))) return o.id;
+    if (!o.next) {
+      if (!sameCoord(o.at, n)) continue;
+      // On a double line a standing train only blocks the line it arrived on.
+      if (!shared || (!station && (o.prev === null || sameCoord(o.prev, t.at)))) return o.id;
+      continue;
+    }
+    const sameLine = double
+      ? sameCoord(o.at, t.at) && sameCoord(o.next, n)
+      : sameSegment(o.at, o.next, t.at, n);
+    if (sameLine) return o.id;
+    if (!shared && (sameCoord(o.at, n) || sameCoord(o.next, n))) return o.id;
+  }
+  return null;
+}
+
+/**
+ * Places where trains can wait or pass: stations, tiles on a plain double line, and junctions.
+ * The single track between two such places is a section.
+ */
+function isPassingPlace(ctx: MovementContext, c: Coord): boolean {
+  return ctx.isStation(c) || ctx.track.isDoubleTile(c) || ctx.track.neighbors(c).length >= 3;
+}
+
+/**
+ * Section signalling: a train standing at a passing place does not enter the single-track
+ * section ahead while a train coming the other way is in it, so they never meet head-on there.
+ */
+function opposingInSection(ctx: MovementContext, t: Train): number | null {
+  if (!isPassingPlace(ctx, t.at)) return null;
+  const section: Coord[] = [];
+  for (const c of t.plan) {
+    if (isPassingPlace(ctx, c)) break;
+    section.push(c);
+  }
+  if (section.length === 0) return null;
+  const index = (c: Coord) => section.findIndex((s) => sameCoord(s, c));
+  for (const o of ctx.trains) {
+    if (o === t) continue;
+    const here = index(o.at);
+    if (here < 0) {
+      // Just pulling into the section: from our end it follows us, from the far end it comes at us.
+      if (o.next && index(o.next) >= 0 && !sameCoord(o.at, t.at)) return o.id;
+      continue;
+    }
+    // Coming towards us if its way ahead leads back down the section or to our tile.
+    const ahead = [o.next, ...o.plan].filter((c): c is Coord => c !== null);
+    const towardsUs =
+      ahead.length === 0 || ahead.some((c) => sameCoord(c, t.at) || (index(c) >= 0 && index(c) < here));
+    if (towardsUs) return o.id;
   }
   return null;
 }
