@@ -37,3 +37,16 @@ describe('random breakdowns', () => {
     expect(breakdowns(fleet(42, 50, 25), 24)).toEqual(breakdowns(fleet(42, 50, 25), 24));
   });
 });
+
+describe('loading old saves', () => {
+  it('maps an unknown locomotive model to the American', () => {
+    const game = Game.generate({ width: 32, height: 32, seed: 3 });
+    const [a, b] = game.towns;
+    game.connect(a!, b!, { confirmBridges: true });
+    game.buildStation('small', a!);
+    game.addTrain({ at: a! });
+    const save = JSON.parse(JSON.stringify(game.toSave()));
+    save.trains[0].model = 'pioneer';
+    expect(Game.fromSave(save).trains[0]!.model).toBe('american');
+  });
+});

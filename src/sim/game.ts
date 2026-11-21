@@ -1120,7 +1120,9 @@ export class Game {
       train.trip = t.trip ?? null;
       train.lastStop = t.lastStop ?? null;
       train.prev = t.prev ?? null;
-      train.model = t.model ?? 'american';
+      // Unknown or retired ids from older builds load as the 4-4-0 American.
+      train.model = t.model && t.model in LOCO ? t.model : 'american';
+      train.speed = unitsPerTick(t.tilesPerDay ?? LOCO[train.model].tilesPerDay);
       train.boughtAt = t.boughtAt ?? 0;
       train.brokenUntil = t.brokenUntil ?? null;
     }
