@@ -14,7 +14,7 @@ if (!styles.length || !scripts.length || !markup) {
   console.error('make-artifact: unexpected dist/index.html shape');
   process.exit(1);
 }
-if (/<script[^>]+\ssrc=|<link[^>]+href=/i.test(html)) {
+if (/<script[^>]+\ssrc=|<link[^>]+href=(?!["']?data:)/i.test(html)) {
   console.error('make-artifact: found an external resource reference');
   process.exit(1);
 }

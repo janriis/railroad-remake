@@ -5,6 +5,7 @@ import { MAP_SIZE, SAVE_KEY } from './constants';
 import { $ } from './dom';
 import { requestDraw } from './draw';
 import { startLoop, setPaused, setSpeed } from './loop';
+import { loadAtlas } from './atlas';
 import { buildTerrainLayer } from './render';
 import { createRoster } from './roster';
 import { initSheet, renderSheet } from './sheets';
@@ -178,6 +179,12 @@ function start(hotData: unknown): void {
     }),
   });
   startLoop(ui);
+  // Sprites and terrain art load after the first (procedural) frame.
+  void loadAtlas().then((ok) => {
+    if (!ok) return;
+    ui.terrain = buildTerrainLayer(ui.game.map);
+    ui.requestDraw();
+  });
 }
 
 if (window.claude?.hot?.ready) window.claude.hot.ready(start);

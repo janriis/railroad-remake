@@ -32,6 +32,9 @@ export function humanError(err: string): string {
     'no route over land': 'No way to get there over land.',
     'route needs a bridge': 'That route needs a bridge. Confirm the bridge to build it.',
     'tile already has a station': 'There is already a station here.',
+    'turn too sharp':
+      'Track can only bend by 45 degrees at a time, and branches must join at a gentle angle.',
+    'track would cross': 'Diagonal tracks cannot cross between tiles. Cross at a tile instead.',
     'station must be on track': 'A station has to sit on track. Tap a tile with track.',
     'train must start at a station': 'Trains start at a station. Tap a station.',
     'too many cars': `A train can pull at most ${MAX_CARS} cars.`,

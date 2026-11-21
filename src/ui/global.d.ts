@@ -21,3 +21,8 @@ interface Window {
     tileToClient(x: number, y: number): { x: number; y: number };
   };
 }
+
+declare module '*.png?inline' {
+  const url: string;
+  export default url;
+}

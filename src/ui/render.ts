@@ -1,10 +1,11 @@
-import type { IndustryKind } from '../sim/config';
+import { TOWN_RADIUS, type IndustryKind } from '../sim/config';
 import type { Station } from '../sim/game';
 import type { GameMap } from '../sim/map';
 import { stepUnits } from '../sim/pathfinding';
 import type { Train } from '../sim/trains';
 import type { Segment } from '../sim/track';
 import type { Coord, Terrain } from '../sim/types';
+import { atlasImage, frame } from './atlas';
 
 /** Pixel size of one tile in the cached terrain layer. */
 export const TS = 32;
@@ -134,10 +135,19 @@ export function buildTerrainLayer(map: GameMap): HTMLCanvasElement {
   const ctx = layer.getContext('2d')!;
   const at = (x: number, y: number): Terrain | null =>
     x < 0 || y < 0 || x >= map.width || y >= map.height ? null : map.terrainAt({ x, y });
-  for (let y = 0; y < map.height; y++) for (let x = 0; x < map.width; x++) drawTile(ctx, at(x, y)!, x, y);
+  const img = atlasImage();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  for (let y = 0; y < map.height; y++)
+    for (let x = 0; x < map.width; x++) {
+      const t = at(x, y)!;
+      const f = img ? frame(`terrain-${t}-${hash(x, y, 7) < 0.5 ? 1 : 2}`) : undefined;
+      if (img && f) ctx.drawImage(img, f.x, f.y, f.w, f.h, x * TS, y * TS, TS, TS);
+      else drawTile(ctx, t, x, y);
+    }
   // Foamy shoreline on the water side of every water/land border.
-  ctx.fillStyle = 'rgba(235,248,255,0.5)';
-  const E = 3;
+  ctx.fillStyle = img ? 'rgba(235,248,255,0.38)' : 'rgba(235,248,255,0.5)';
+  const E = img ? 2 : 3;
   for (let y = 0; y < map.height; y++)
     for (let x = 0; x < map.width; x++) {
       if (at(x, y) !== 'water') continue;
@@ -191,9 +201,12 @@ export function drawTrack(ctx: CanvasRenderingContext2D, segs: readonly Segment[
 
   // Gravel bed.
   ctx.lineCap = 'round';
-  ctx.strokeStyle = 'rgba(92,76,60,0.85)';
   for (const g of geo) {
     if (g.bridge) continue;
+    ctx.strokeStyle = 'rgba(74,62,50,0.5)';
+    ctx.lineWidth = (g.dbl ? 0.58 : 0.32) + 0.05;
+    line(g, 0);
+    ctx.strokeStyle = '#b3a998';
     ctx.lineWidth = g.dbl ? 0.58 : 0.32;
     line(g, 0);
   }
@@ -230,7 +243,7 @@ export function drawTrack(ctx: CanvasRenderingContext2D, segs: readonly Segment[
   }
 
   // Sleepers.
-  ctx.strokeStyle = '#4a3322';
+  ctx.strokeStyle = '#7a5538';
   ctx.lineWidth = 0.055;
   for (const g of geo) {
     if (g.bridge) continue;
@@ -242,7 +255,7 @@ export function drawTrack(ctx: CanvasRenderingContext2D, segs: readonly Segment[
   // Rails.
   ctx.lineCap = 'round';
   ctx.lineWidth = 0.04;
-  ctx.strokeStyle = '#d8dce0';
+  ctx.strokeStyle = '#f1f4f7';
   for (const g of geo) {
     if (g.dbl) {
       for (const c of [-0.16, 0.16]) {
@@ -260,7 +273,7 @@ const WALLS = ['#e8d9b8', '#d9a98a', '#cfd6dd', '#e6c07a'];
 const ROOFS = ['#a8432f', '#7a3b2e', '#4f5f73', '#8a5a2b'];
 
 /** Draws a small cluster of buildings on a town tile (tile units). */
-export function drawTownBuildings(ctx: CanvasRenderingContext2D, town: Coord): void {
+function drawTownProcedural(ctx: CanvasRenderingContext2D, town: Coord): void {
   const { x, y } = town;
   ctx.fillStyle = 'rgba(70,55,40,0.28)';
   ctx.fillRect(x + 0.04, y + 0.06, 0.92, 0.9);
@@ -303,7 +316,7 @@ export const INDUSTRY_LABELS: Record<IndustryKind, string> = {
 };
 
 /** Draws a simple glyph for an industry on its tile (tile units). */
-export function drawIndustry(ctx: CanvasRenderingContext2D, kind: IndustryKind, at: Coord): void {
+function drawIndustryProcedural(ctx: CanvasRenderingContext2D, kind: IndustryKind, at: Coord): void {
   const { x, y } = at;
   const col = INDUSTRY_COLOURS[kind];
   ctx.fillStyle = 'rgba(40,30,20,0.3)';
@@ -412,7 +425,7 @@ const STATION_ROOF: Record<string, string> = { small: '#d1495b', medium: '#edae4
 const STATION_SCALE: Record<string, number> = { small: 0.4, medium: 0.54, large: 0.7 };
 
 /** Draws a station platform and building on its track tile (tile units). */
-export function drawStation(ctx: CanvasRenderingContext2D, st: Station): void {
+function drawStationProcedural(ctx: CanvasRenderingContext2D, st: Station): void {
   const { x, y } = st.at;
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.fillRect(x + 0.1, y + 0.13, 0.8, 0.8);
@@ -547,7 +560,7 @@ export function trainPoses(t: Train, extra = 0): Pose[] {
 }
 
 /** Draws one vehicle at its pose (tile units). */
-export function drawVehicle(ctx: CanvasRenderingContext2D, p: Pose, colour: string): void {
+function drawVehicleProcedural(ctx: CanvasRenderingContext2D, p: Pose, colour: string): void {
   ctx.save();
   ctx.translate(p.x, p.y);
   ctx.rotate(p.a);
@@ -586,5 +599,116 @@ export function drawVehicle(ctx: CanvasRenderingContext2D, p: Pose, colour: stri
     ctx.fillRect(-0.2, 0.0, 0.4, 0.02);
     ctx.strokeRect(-0.2, -0.12, 0.4, 0.24);
   }
+  ctx.restore();
+}
+
+// ---------- atlas sprites ----------
+
+/** Draws an atlas frame `width` tiles wide, centred on cx with its bottom edge at by (tile units). */
+function sprite(ctx: CanvasRenderingContext2D, name: string, cx: number, by: number, width: number): boolean {
+  const img = atlasImage();
+  const f = img ? frame(name) : undefined;
+  if (!img || !f) return false;
+  const h = (width * f.h) / f.w;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, f.x, f.y, f.w, f.h, cx - width / 2, by - h, width, h);
+  return true;
+}
+
+function groundShadow(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number): void {
+  ctx.fillStyle = 'rgba(30,25,15,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** One house per this many inhabitants (within the limits below). */
+const PEOPLE_PER_HOUSE = 160;
+const MIN_HOUSES = 3;
+const MAX_HOUSES = 18;
+/** Two building plots per tile, as offsets of the house's bottom centre within the tile. */
+const PLOTS: [number, number][] = [
+  [0.3, 0.55],
+  [0.7, 0.95],
+];
+
+/**
+ * Draws a town's houses spread over its footprint (TOWN_RADIUS around the centre), more for
+ * bigger towns, densest in the middle. Tiles for which `blocked` is true (track, stations,
+ * industries) stay free. Back to front.
+ */
+export function drawTownBuildings(
+  ctx: CanvasRenderingContext2D,
+  town: Coord & { population?: number },
+  blocked: (c: Coord) => boolean = () => false,
+): void {
+  if (!atlasImage()) return drawTownProcedural(ctx, town);
+  const { x, y } = town;
+  const wanted = Math.round((town.population ?? 1000) / PEOPLE_PER_HOUSE);
+  const count = Math.max(MIN_HOUSES, Math.min(MAX_HOUSES, wanted));
+  const plots: { px: number; py: number; k: number }[] = [];
+  for (let dy = -TOWN_RADIUS; dy <= TOWN_RADIUS; dy++)
+    for (let dx = -TOWN_RADIUS; dx <= TOWN_RADIUS; dx++) {
+      const tx = x + dx;
+      const ty = y + dy;
+      if (blocked({ x: tx, y: ty })) continue;
+      const ring = Math.max(Math.abs(dx), Math.abs(dy));
+      PLOTS.forEach(([ox, oy], i) =>
+        plots.push({ px: tx + ox, py: ty + oy, k: ring + hash(tx, ty, 300 + i) * 0.9 }),
+      );
+    }
+  plots.sort((a, b) => a.k - b.k);
+  const chosen = plots.slice(0, count).sort((a, b) => a.py - b.py || a.px - b.px);
+  for (const p of chosen) {
+    const fx = Math.floor(p.px);
+    const fy = Math.floor(p.py);
+    const jx = (hash(fx, fy, 320) - 0.5) * 0.08;
+    const w = 0.44 + hash(fx, fy, 340 + Math.round(p.py * 2)) * 0.06;
+    const n = 1 + Math.floor(hash(fx, fy, 330 + Math.round(p.px * 2)) * 4);
+    groundShadow(ctx, p.px + jx, p.py - 0.02, w * 0.4, 0.05);
+    sprite(ctx, `house-${n}`, p.px + jx, p.py, w);
+  }
+}
+
+/** Draws an industry sprite on its tile (tile units). */
+export function drawIndustry(ctx: CanvasRenderingContext2D, kind: IndustryKind, at: Coord): void {
+  if (!atlasImage()) return drawIndustryProcedural(ctx, kind, at);
+  groundShadow(ctx, at.x + 0.5, at.y + 0.95, 0.46, 0.08);
+  sprite(ctx, `industry-${kind}`, at.x + 0.5, at.y + 1.0, 1.08);
+}
+
+const STATION_WIDTH: Record<string, number> = { small: 1.0, medium: 1.12, large: 1.26 };
+
+/** Draws a station sprite anchored at the bottom centre of its tile (tile units). */
+export function drawStation(ctx: CanvasRenderingContext2D, st: Station): void {
+  if (!atlasImage()) return drawStationProcedural(ctx, st);
+  const { x, y } = st.at;
+  sprite(ctx, `station-${st.size}`, x + 0.5, y + 1.02, STATION_WIDTH[st.size] ?? 1.0);
+}
+
+const VEHICLE_LENGTH = { loco: 0.68, passenger: 0.46, freight: 0.46 } as const;
+
+/** Draws one vehicle at its pose (tile units); a coloured stripe along its side shows the train colour. */
+export function drawVehicle(ctx: CanvasRenderingContext2D, p: Pose, colour: string): void {
+  const img = atlasImage();
+  const name = p.kind === 'loco' ? 'loco' : p.kind === 'passenger' ? 'car-passenger' : 'car-freight';
+  const f = img ? frame(name) : undefined;
+  if (!img || !f) return drawVehicleProcedural(ctx, p, colour);
+  const len = VEHICLE_LENGTH[p.kind];
+  const h = (len * f.h) / f.w;
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(p.a);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(-len / 2 + 0.01, -h / 2 + 0.035, len, h);
+  const stripe = p.kind === 'loco' ? 0.075 : 0.05;
+  ctx.fillStyle = colour;
+  ctx.beginPath();
+  ctx.roundRect(-len / 2 + 0.02, h / 2 - stripe * 0.4, len - 0.04, stripe, stripe / 2);
+  ctx.fill();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, f.x, f.y, f.w, f.h, -len / 2, -h / 2, len, h);
   ctx.restore();
 }

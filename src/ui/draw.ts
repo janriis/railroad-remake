@@ -59,7 +59,9 @@ export function draw(ui: Ui, now = performance.now()): void {
     ctx.stroke();
   }
 
-  for (const t of ui.game.towns) drawTownBuildings(ctx, t);
+  const g = ui.game;
+  const builtOn = (c: { x: number; y: number }) => g.track.touches(c) || g.isStation(c) || !!g.industryAt(c);
+  for (const t of g.towns) drawTownBuildings(ctx, t, builtOn);
   for (const i of ui.game.industries) drawIndustry(ctx, i.kind, i.at);
   drawTrack(ctx, ui.segs);
   drawRouteLegs(ui, z);
