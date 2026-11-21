@@ -1048,3 +1048,11 @@ button:focus-visible {
   font-size: 12px;
   color: var(--muted);
 }
+.car-row .car-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.car-row .car-name .sub {
+  font-size: 12px;
+}

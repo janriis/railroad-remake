@@ -94,7 +94,7 @@ export function handleTap(ui: Ui, sx: number, sy: number): void {
       ui.showToast('Tap a station to buy a train there.');
       return;
     }
-    ui.buy = { at: { ...st.at }, model: cheapestOnSale(ui.game), passengerCars: 2, freightCars: 0 };
+    ui.buy = { at: { ...st.at }, model: cheapestOnSale(ui.game), cars: {} };
     ui.renderSheet();
     ui.requestDraw();
     return;

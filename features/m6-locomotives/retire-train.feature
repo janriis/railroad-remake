@@ -6,7 +6,7 @@ Feature: Retiring trains
 
   Rules: a train standing at a station can be retired. The company gets the locomotive's trade-in value
   (round(price x (0.5 - 0.4 x min(1, age / working life))): 50% new, 10% from the end of its working life)
-  plus 50% of each car's price (passenger car $5,000, freight car $4,000), booked as rolling stock. The
+  plus 50% of each car's price (coach $5,000, boxcar $4,000), booked as rolling stock. The
   train and any cargo on board are gone.
 
   Background:
@@ -16,9 +16,9 @@ Feature: Retiring trains
     And a small station exists at (2, 5)
     And a small station exists at (18, 5)
 
-  # New American: 50% x $50,000 = $25,000; 2 passenger cars x $5,000 + 1 freight car x $4,000 = $14,000.
+  # New American: 50% x $50,000 = $25,000; 2 coaches x $5,000 + 1 boxcar x $4,000 = $14,000.
   Scenario: Retiring a train pays back the locomotive's trade-in and the cars' resale value
-    Given an American train with 2 passenger cars and 1 freight car exists at the station at (2, 5)
+    Given an American train with 2 coaches and 1 boxcar exists at the station at (2, 5)
     When I retire the train
     Then the command succeeds
     And the company should have received a refund of $39,000

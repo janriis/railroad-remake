@@ -23,7 +23,7 @@ Feature: Running costs
     Then the company should have paid $2,000 in track maintenance
 
   Scenario: A train costs money to run
-    Given a train with 2 passenger cars exists at the station at (2, 5)
+    Given a train with 2 coaches exists at the station at (2, 5)
     When 1 months pass
     Then the company should have paid $2,400 in train running costs
 

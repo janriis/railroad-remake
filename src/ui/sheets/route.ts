@@ -1,6 +1,9 @@
 import { type DragState, type Ui } from '../state';
 import { humanError, routeList, stationNameAt, trainName } from '../format';
 import { btn } from '../dom';
+import { CAR, CAR_KEEP_ORDER, type CarType } from '../../sim/config';
+import { carsOf, cleanMix, totalCars } from '../../sim/cars';
+import { carStepper } from '../cars';
 import { cancelRouting, finishPicking, saveRoute, undoStop } from '../tools/route';
 import { sameCoord, type Coord } from '../../sim/types';
 
@@ -22,7 +25,8 @@ export function renderRouteEditor(ui: Ui): void {
   const r = ui.routing!;
   const train = ui.game.train(r.trainId);
   if (!train) return;
-  const owned = train.owned.passengerCars + train.owned.freightCars;
+  const ownedTypes = CAR_KEEP_ORDER.filter((t) => carsOf(train.owned, t) > 0);
+  const owned = totalCars(train.owned);
   const n = r.stops.length;
   const acts: Record<string, () => void> = {
     cancel: () => cancelRouting(ui),
@@ -95,20 +99,21 @@ export function renderRouteEditor(ui: Ui): void {
       r.orders[i] = { ...train.owned };
     });
     acts[`none-${i}`] = edit(() => {
-      r.orders[i] = { passengerCars: 0, freightCars: 0 };
+      r.orders[i] = {};
     });
-    // Any mix up to the cars the train owns; the rest ride along as spares.
-    const set = (p: number, f: number) =>
+    // Any mix up to the cars of each type the train owns; the rest ride along as spares.
+    const setType = (t: CarType, d: number) =>
       edit(() => {
-        const q = Math.max(0, Math.min(owned, p));
-        r.orders[i] = { passengerCars: q, freightCars: Math.max(0, Math.min(owned - q, f)) };
+        const cur = r.orders[i] ?? {};
+        r.orders[i] = cleanMix({
+          ...cur,
+          [t]: Math.max(0, Math.min(carsOf(train.owned, t), carsOf(cur, t) + d)),
+        });
       });
-    const op = o?.passengerCars ?? 0;
-    const of = o?.freightCars ?? 0;
-    acts[`p--${i}`] = set(op - 1, of);
-    acts[`p+-${i}`] = set(op + 1, of);
-    acts[`f--${i}`] = set(op, of - 1);
-    acts[`f+-${i}`] = set(op, of + 1);
+    for (const t of ownedTypes) {
+      acts[`oc-:${t}-${i}`] = setType(t, -1);
+      acts[`oc+:${t}-${i}`] = setType(t, 1);
+    }
     let cars: string;
     if (owned === 0) cars = '<div class="sub">This train has no cars to arrange.</div>';
     else {
@@ -116,19 +121,25 @@ export function renderRouteEditor(ui: Ui): void {
         `<div class="seg" role="group" aria-label="Cars at ${name}">` +
         `<button type="button" class="segbtn${o ? '' : ' on'}" data-act="keep-${i}" aria-pressed="${!o}">Keep cars</button>` +
         `<button type="button" class="segbtn${o ? ' on' : ''}" data-act="split-${i}" aria-pressed="${!!o}">Set cars here</button></div>`;
-      const none = !!o && o.passengerCars + o.freightCars === 0;
+      const none = !!o && totalCars(o) === 0;
       if (o) {
-        const st = (label: string, dnAct: string, upAct: string, n2: number, dn: boolean, up: boolean) =>
-          `<div class="stepper"><span>${label}</span><span class="ctl">` +
-          `<button type="button" data-act="${dnAct}-${i}" aria-label="Fewer ${label} at ${name}"${dn ? '' : ' disabled'}>−</button>` +
-          `<output>${n2}</output>` +
-          `<button type="button" data-act="${upAct}-${i}" aria-label="More ${label} at ${name}"${up ? '' : ' disabled'}>+</button></span></div>`;
-        const room = o.passengerCars + o.freightCars < owned;
-        const spare = owned - o.passengerCars - o.freightCars;
+        for (const t of ownedTypes)
+          cars += carStepper({
+            type: t,
+            n: carsOf(o, t),
+            canDown: carsOf(o, t) > 0,
+            canUp: carsOf(o, t) < carsOf(train.owned, t),
+            act: 'oc',
+            suffix: `-${i}`,
+            detail: `of ${carsOf(train.owned, t)} owned`,
+            aria: `at ${name}`,
+          });
+        const spare = CAR_KEEP_ORDER.map((t) => [t, carsOf(train.owned, t) - carsOf(o, t)] as const)
+          .filter(([, n]) => n > 0)
+          .map(([t, n]) => `${n} ${n === 1 ? CAR[t].name : CAR[t].plural}`)
+          .join(', ');
         cars +=
-          st('Passenger', 'p-', 'p+', o.passengerCars, o.passengerCars > 0, room) +
-          st('Freight', 'f-', 'f+', o.freightCars, o.freightCars > 0, room) +
-          `<div class="sub">${none ? 'The locomotive runs alone from here.' : spare > 0 ? `${spare} spare car${spare === 1 ? '' : 's'} ride along uncoupled.` : 'All cars coupled.'}` +
+          `<div class="sub">${none ? 'The locomotive runs alone from here.' : spare ? `Spare, riding along uncoupled: ${spare}.` : 'All cars coupled.'}` +
           (none ? '' : ` <button type="button" class="mini txt" data-act="none-${i}">No cars</button>`) +
           '</div>';
       }

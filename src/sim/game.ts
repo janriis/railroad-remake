@@ -4,11 +4,14 @@ import {
   DEFAULT_STARTING_CASH,
   DEMOLISH_REFUND_RATE,
   DIAGONAL_COST_FACTOR,
-  FREIGHT_CAR_COST,
   MAX_BRIDGE_WATER_TILES,
-  PASSENGER_CAR_COST,
   AGE_RUNNING_COST_RATE,
   BREAD_GROWTH_RATE,
+  CAR,
+  CAR_FILL_ORDER,
+  CAR_KEEP_ORDER,
+  CAR_TYPES,
+  type CarType,
   BREAKDOWN_CHANCE,
   BREAKDOWN_CHANCE_PER_YEAR_WORN,
   BREAKDOWN_DAYS,
@@ -22,18 +25,15 @@ import {
   BUILDING,
   BUILDING_REFUND_RATE,
   BUILDING_SLOTS,
-  CARGO,
   CAR_RUNNING_COST,
   DEPOSIT_CAP_MONTHS,
   SATURATED_PRICE_RATE,
   SATURATION_LIMIT,
   TOWN_DEMAND,
   type BuildingKind,
-  FREIGHT_CAR_CAPACITY,
   INDUSTRY,
   INHABITANTS_PER_MAILBAG,
   INHABITANTS_PER_PASSENGER,
-  PASSENGER_CAR_CAPACITY,
   TOWN_GROWTH_RATE,
   type Cargo,
   type IndustryKind,
@@ -70,7 +70,8 @@ import { findTrackPath } from './pathfinding';
 import { planTrack, priceRoute, type PlanOptions, type PlanResult, type TrackPlan } from './planner';
 import { Rng } from './rng';
 import { TrackNetwork, isAdjacent, isDiagonal, straightPath } from './track';
-import { advanceTrains, unitsPerTick, type CarCounts, type Train } from './trains';
+import { advanceTrains, unitsPerTick, type Train } from './trains';
+import { carriesCargo, carsOf, cleanMix, mixValue, totalCars, type CarMix } from './cars';
 import { coordKey, fail, ok, type CommandResult, type Coord, type Terrain } from './types';
 
 export interface GameOptions {
@@ -114,10 +115,10 @@ export interface StationBuilding {
 export interface TrainOrder {
   at: Coord;
   locomotive: boolean;
-  /** Locomotive model; defaults to the Pioneer. */
+  /** Locomotive model; defaults to the 4-4-0 American. */
   model?: LocoModel;
-  passengerCars?: number;
-  freightCars?: number;
+  /** Cars to buy with it, by type. */
+  cars?: CarMix;
 }
 
 export interface SaveData {
@@ -131,13 +132,15 @@ export interface SaveData {
   readonly trains: {
     at: Coord;
     tilesPerDay: number;
-    passengerCars: number;
-    freightCars: number;
+    /** Coupled and owned cars by type. Saves from before M7 have passengerCars/freightCars instead. */
+    cars?: CarMix;
+    owned?: CarMix | LegacyCarCounts;
+    passengerCars?: number;
+    freightCars?: number;
     route: Coord[];
-    stopOrders?: (CarCounts | null)[];
+    stopOrders?: (CarMix | LegacyCarCounts | null)[];
     target: number;
-    cargo?: Lot[];
-    owned?: CarCounts;
+    cargo?: (Omit<Lot, 'car'> & { car?: CarType })[];
     trip?: Coord | null;
     lastStop?: Coord | null;
     /** Tile it came from, so it keeps facing the same way after loading. */
@@ -419,19 +422,17 @@ export class Game {
   // --- Trains ------------------------------------------------------------------
 
   trainPrice(order: TrainOrder): number {
-    return (
-      (order.locomotive ? LOCO[order.model ?? 'american'].price : 0) +
-      (order.passengerCars ?? 0) * PASSENGER_CAR_COST +
-      (order.freightCars ?? 0) * FREIGHT_CAR_COST
-    );
+    return (order.locomotive ? LOCO[order.model ?? 'american'].price : 0) + mixValue(order.cars ?? {});
   }
 
   buyTrain(order: TrainOrder): { ok: true; cost: number; train: Train } | { ok: false; error: string } {
-    const cars = (order.passengerCars ?? 0) + (order.freightCars ?? 0);
+    const cars = order.cars ?? {};
     if (!order.locomotive) return fail('cars need a locomotive');
     const model = order.model ?? 'american';
     if (!this.onSale(model)) return fail('model not on sale');
-    if (cars > LOCO[model].maxCars) return fail('too many cars');
+    if (CAR_TYPES.some((t) => carsOf(cars, t) < 0)) return fail('car counts cannot be negative');
+    if (CAR_TYPES.some((t) => carsOf(cars, t) > 0 && !this.carOnSale(t))) return fail('car type not on sale');
+    if (totalCars(cars) > LOCO[model].maxCars) return fail('too many cars');
     if (!this.isStation(order.at)) return fail('train must start at a station');
     const cost = this.trainPrice(order);
     if (cost > this.cash) return fail('insufficient funds');
@@ -441,13 +442,7 @@ export class Game {
   }
 
   /** Loading/fixture API: place a train without checks or cost. */
-  addTrain(opts: {
-    at: Coord;
-    model?: LocoModel;
-    tilesPerDay?: number;
-    passengerCars?: number;
-    freightCars?: number;
-  }): Train {
+  addTrain(opts: { at: Coord; model?: LocoModel; tilesPerDay?: number; cars?: CarMix }): Train {
     const model = opts.model ?? 'american';
     const train: Train = {
       id: this.nextId++,
@@ -459,9 +454,8 @@ export class Game {
       model,
       boughtAt: this.time,
       brokenUntil: null,
-      passengerCars: opts.passengerCars ?? 0,
-      freightCars: opts.freightCars ?? 0,
-      owned: { passengerCars: opts.passengerCars ?? 0, freightCars: opts.freightCars ?? 0 },
+      cars: cleanMix(opts.cars ?? {}),
+      owned: cleanMix(opts.cars ?? {}),
       route: [],
       stopOrders: [],
       target: 0,
@@ -488,11 +482,7 @@ export class Game {
    * Give a train its stops. It heads for the first stop, or the second if it already
    * stands on the first, and then cycles through them.
    */
-  setRoute(
-    trainId: number,
-    stops: readonly Coord[],
-    orders: readonly (CarCounts | null)[] = [],
-  ): CommandResult {
+  setRoute(trainId: number, stops: readonly Coord[], orders: readonly (CarMix | null)[] = []): CommandResult {
     const train = this.train(trainId);
     if (!train) return fail('no such train');
     if (stops.length < 2) return fail('route needs at least two stops');
@@ -501,12 +491,12 @@ export class Game {
       const next = stops[(i + 1) % stops.length]!;
       if (next.x === stops[i]!.x && next.y === stops[i]!.y) return fail('consecutive stops must differ');
     }
-    const owned = carCount(train.owned);
     for (const order of orders) {
       if (!order) continue;
-      if (order.passengerCars < 0 || order.freightCars < 0) return fail('car counts cannot be negative');
-      if (order.passengerCars + order.freightCars > owned)
-        return fail(`a stop order can use at most the train's ${owned} cars`);
+      if (CAR_TYPES.some((t) => carsOf(order, t) < 0)) return fail('car counts cannot be negative');
+      const over = CAR_TYPES.find((t) => carsOf(order, t) > carsOf(train.owned, t));
+      if (over)
+        return fail(`a stop order can use at most the train's ${carsOf(train.owned, over)} ${over} cars`);
     }
     const legs: [Coord, Coord][] = [[train.at, stops[0]!]];
     for (let i = 1; i < stops.length; i++) legs.push([stops[i - 1]!, stops[i]!]);
@@ -514,7 +504,7 @@ export class Game {
       if (!findTrackPath(this.track, a, b)) return fail(`no track connects ${fmt(a)} and ${fmt(b)}`);
 
     train.route = stops.map((c) => ({ ...c }));
-    train.stopOrders = stops.map((_, i) => (orders[i] ? { ...orders[i]! } : null));
+    train.stopOrders = stops.map((_, i) => (orders[i] ? cleanMix(orders[i]!) : null));
     train.target = train.at.x === stops[0]!.x && train.at.y === stops[0]!.y ? 1 : 0;
     train.plan = [];
     return ok(0);
@@ -524,24 +514,36 @@ export class Game {
    * Change how many cars of each type a train owns. Added cars cost their price; removed
    * cars pay back CAR_RESALE_RATE of it. Stop orders that no longer fit are dropped.
    */
-  changeCars(trainId: number, cars: CarCounts): CommandResult {
+  changeCars(trainId: number, cars: CarMix): CommandResult {
     const train = this.train(trainId);
     if (!train) return fail('no such train');
-    if (cars.passengerCars < 0 || cars.freightCars < 0) return fail('car counts cannot be negative');
-    if (cars.passengerCars + cars.freightCars > LOCO[train.model].maxCars) return fail('too many cars');
-    const price = (n: number, unit: number) => (n > 0 ? n * unit : Math.round(n * unit * CAR_RESALE_RATE));
-    const cost =
-      price(cars.passengerCars - train.owned.passengerCars, PASSENGER_CAR_COST) +
-      price(cars.freightCars - train.owned.freightCars, FREIGHT_CAR_COST);
+    if (CAR_TYPES.some((t) => carsOf(cars, t) < 0)) return fail('car counts cannot be negative');
+    if (CAR_TYPES.some((t) => carsOf(cars, t) > carsOf(train.owned, t) && !this.carOnSale(t)))
+      return fail('car type not on sale');
+    if (totalCars(cars) > LOCO[train.model].maxCars) return fail('too many cars');
+    const cost = CAR_TYPES.reduce((n, t) => {
+      const d = carsOf(cars, t) - carsOf(train.owned, t);
+      return n + (d > 0 ? d * CAR[t].price : Math.round(d * CAR[t].price * CAR_RESALE_RATE));
+    }, 0);
     if (cost > this.cash) return fail('insufficient funds');
-    train.passengerCars = cars.passengerCars;
-    train.freightCars = cars.freightCars;
-    train.owned = { ...cars };
-    trimToCapacity(train);
-    const owned = carCount(cars);
-    train.stopOrders = train.stopOrders.map((o) => (o && carCount(o) <= owned ? o : null));
+    this.setOwnedCars(train, cars);
     this.spend(cost, 'rollingStock');
     return ok(cost);
+  }
+
+  /** A car type is for sale from its year on; legacy freight cars never are. */
+  carOnSale(type: CarType, year = this.date.year): boolean {
+    return CAR[type].buyable && CAR[type].from <= year;
+  }
+
+  /** New owned cars, all coupled; stop orders that ask for more than owned of a type are dropped. */
+  private setOwnedCars(train: Train, cars: CarMix): void {
+    train.owned = cleanMix(cars);
+    train.cars = cleanMix(cars);
+    trimToCapacity(train);
+    train.stopOrders = train.stopOrders.map((o) =>
+      o && CAR_TYPES.every((t) => carsOf(o, t) <= carsOf(train.owned, t)) ? o : null,
+    );
   }
 
   // --- Towns, industries and cargo ----------------------------------------------
@@ -749,8 +751,7 @@ export class Game {
     if (station) this.unload(train, station);
     const order = train.stopOrders[stopIndex];
     if (order) {
-      train.passengerCars = order.passengerCars;
-      train.freightCars = order.freightCars;
+      train.cars = cleanMix(order);
       trimToCapacity(train);
     }
     if (station) this.load(train, station);
@@ -767,18 +768,23 @@ export class Game {
   }
 
   private load(train: Train, station: Station): void {
-    const room = { passenger: spareRoom(train, 'passenger'), freight: spareRoom(train, 'freight') };
+    const room = new Map(CAR_TYPES.map((t) => [t, spareRoom(train, t)]));
+    /** Load up to `available` units into the coupled cars that carry it, specialised types first. */
     const take = (cargo: Cargo, available: number): number => {
-      const kind = CARGO[cargo].car;
-      const n = Math.min(available, room[kind]);
-      if (n <= 0) return 0;
-      room[kind] -= n;
-      const lot = train.cargo.find(
-        (l) => l.cargo === cargo && sameAt(l.from, station.at) && l.loadedAt === this.time,
-      );
-      if (lot) lot.units += n;
-      else train.cargo.push({ cargo, units: n, from: { ...station.at }, loadedAt: this.time });
-      return n;
+      let loaded = 0;
+      for (const car of CAR_FILL_ORDER) {
+        if (!carriesCargo(car, cargo)) continue;
+        const n = Math.min(available - loaded, room.get(car)!);
+        if (n <= 0) continue;
+        room.set(car, room.get(car)! - n);
+        loaded += n;
+        const lot = train.cargo.find(
+          (l) => l.cargo === cargo && l.car === car && sameAt(l.from, station.at) && l.loadedAt === this.time,
+        );
+        if (lot) lot.units += n;
+        else train.cargo.push({ cargo, car, units: n, from: { ...station.at }, loadedAt: this.time });
+      }
+      return loaded;
     };
     for (const w of station.waiting) {
       const n = take(w.cargo, w.units);
@@ -938,10 +944,7 @@ export class Game {
     const train = this.train(trainId);
     if (!train) return fail('no such train');
     if (!this.atStation(train)) return fail('train must be at a station');
-    const refund =
-      this.tradeInValue(train) +
-      Math.round(train.owned.passengerCars * PASSENGER_CAR_COST * CAR_RESALE_RATE) +
-      Math.round(train.owned.freightCars * FREIGHT_CAR_COST * CAR_RESALE_RATE);
+    const refund = this.tradeInValue(train) + mixValue(train.owned, CAR_RESALE_RATE);
     this.trains.splice(this.trains.indexOf(train), 1);
     this.spend(-refund, 'rollingStock');
     return ok(-refund);
@@ -956,32 +959,29 @@ export class Game {
 
   /**
    * Swap the locomotive for a model on sale. Pays the new price minus the trade-in; cars the new model
-   * cannot pull are sold (passenger cars are kept first). Cars, route, orders and cargo stay.
+   * cannot pull are sold (kept in CAR_KEEP_ORDER). Cars, route, orders and cargo stay.
    */
   replaceLocomotive(trainId: number, model: LocoModel): CommandResult {
     const train = this.train(trainId);
     if (!train) return fail('no such train');
     if (!this.atStation(train)) return fail('train must be at a station');
     if (!this.onSale(model)) return fail('model not on sale');
-    const max = LOCO[model].maxCars;
-    const passengerCars = Math.min(train.owned.passengerCars, max);
-    const freightCars = Math.min(train.owned.freightCars, max - passengerCars);
-    const resale =
-      Math.round((train.owned.passengerCars - passengerCars) * PASSENGER_CAR_COST * CAR_RESALE_RATE) +
-      Math.round((train.owned.freightCars - freightCars) * FREIGHT_CAR_COST * CAR_RESALE_RATE);
+    let room = LOCO[model].maxCars;
+    const kept: CarMix = {};
+    const sold: CarMix = {};
+    for (const t of CAR_KEEP_ORDER) {
+      const keep = Math.min(carsOf(train.owned, t), room);
+      room -= keep;
+      kept[t] = keep;
+      sold[t] = carsOf(train.owned, t) - keep;
+    }
+    const resale = mixValue(sold, CAR_RESALE_RATE);
     const cost = LOCO[model].price - this.tradeInValue(train) - resale;
     if (cost > this.cash) return fail('insufficient funds');
     train.model = model;
     train.boughtAt = this.time;
     train.speed = unitsPerTick(LOCO[model].tilesPerDay);
-    if (passengerCars !== train.owned.passengerCars || freightCars !== train.owned.freightCars) {
-      train.owned = { passengerCars, freightCars };
-      train.passengerCars = passengerCars;
-      train.freightCars = freightCars;
-      trimToCapacity(train);
-      const owned = passengerCars + freightCars;
-      train.stopOrders = train.stopOrders.map((o) => (o && carCount(o) <= owned ? o : null));
-    }
+    if (totalCars(sold) > 0) this.setOwnedCars(train, kept);
     this.spend(cost, 'rollingStock');
     return ok(cost);
   }
@@ -1000,7 +1000,7 @@ export class Game {
 
   /** What next month-end will charge, by category. */
   monthlyRunningCosts(): { trackMaintenance: number; trainRunning: number } {
-    const cars = this.trains.reduce((n, t) => n + carCount(t.owned), 0);
+    const cars = this.trains.reduce((n, t) => n + totalCars(t.owned), 0);
     return {
       trackMaintenance: this.track.lineCount * TRACK_MAINTENANCE_PER_SEGMENT,
       trainRunning: this.trains.reduce((n, t) => n + this.locoRunningCost(t), 0) + cars * CAR_RUNNING_COST,
@@ -1061,8 +1061,7 @@ export class Game {
       trains: this.trains.map((t) => ({
         at: t.at,
         tilesPerDay: (t.speed * TICKS_PER_DAY) / TILE_UNITS,
-        passengerCars: t.passengerCars,
-        freightCars: t.freightCars,
+        cars: t.cars,
         owned: t.owned,
         route: t.route,
         stopOrders: t.stopOrders,
@@ -1115,10 +1114,19 @@ export class Game {
     for (const t of save.trains) {
       const train = game.addTrain(t);
       train.route = t.route;
-      train.stopOrders = t.stopOrders ?? t.route.map(() => null);
+      // Before M7 trains had passenger and freight cars: they become coaches and legacy freight cars.
+      train.cars = cleanMix(
+        t.cars ?? fromLegacy({ passengerCars: t.passengerCars ?? 0, freightCars: t.freightCars ?? 0 }),
+      );
+      train.owned = t.owned ? cleanMix(fromLegacy(t.owned)) : { ...train.cars };
+      train.stopOrders = (t.stopOrders ?? t.route.map(() => null)).map((o) =>
+        o ? cleanMix(fromLegacy(o)) : null,
+      );
       train.target = t.target;
-      train.cargo = t.cargo ?? [];
-      train.owned = t.owned ?? { passengerCars: t.passengerCars, freightCars: t.freightCars };
+      train.cargo = (t.cargo ?? []).map((l) => ({
+        ...l,
+        car: l.car ?? (l.cargo === 'passengers' ? 'coach' : l.cargo === 'mail' ? 'coach' : 'legacy-freight'),
+      }));
       train.trip = t.trip ?? null;
       train.lastStop = t.lastStop ?? null;
       train.prev = t.prev ?? null;
@@ -1141,24 +1149,19 @@ function addWaiting(station: Station, cargo: Cargo, source: string, units: numbe
   else station.waiting.push({ cargo, source, units });
 }
 
-function capacity(train: Train, kind: 'passenger' | 'freight'): number {
-  return kind === 'passenger'
-    ? train.passengerCars * PASSENGER_CAR_CAPACITY
-    : train.freightCars * FREIGHT_CAR_CAPACITY;
+/** Units of free room in the coupled cars of one type. */
+function spareRoom(train: Train, type: CarType): number {
+  const used = train.cargo.reduce((n, l) => n + (l.car === type ? l.units : 0), 0);
+  return carsOf(train.cars, type) * CAR[type].capacity - used;
 }
 
-function spareRoom(train: Train, kind: 'passenger' | 'freight'): number {
-  const used = train.cargo.reduce((n, l) => n + (CARGO[l.cargo].car === kind ? l.units : 0), 0);
-  return capacity(train, kind) - used;
-}
-
-/** After cars are removed, cargo that no longer fits is lost (newest first). */
+/** After cars are uncoupled or sold, cargo that no longer fits is lost (newest first). */
 function trimToCapacity(train: Train): void {
-  for (const kind of ['passenger', 'freight'] as const) {
-    let over = -spareRoom(train, kind);
+  for (const type of CAR_TYPES) {
+    let over = -spareRoom(train, type);
     for (let i = train.cargo.length - 1; i >= 0 && over > 0; i--) {
       const lot = train.cargo[i]!;
-      if (CARGO[lot.cargo].car !== kind) continue;
+      if (lot.car !== type) continue;
       const cut = Math.min(lot.units, over);
       lot.units -= cut;
       over -= cut;
@@ -1167,8 +1170,23 @@ function trimToCapacity(train: Train): void {
   train.cargo = train.cargo.filter((l) => l.units > 0);
 }
 
+/** Car counts as saved before M7. */
+export interface LegacyCarCounts {
+  passengerCars: number;
+  freightCars: number;
+}
+
+/** Cars saved before M7: passenger cars become coaches, freight cars legacy freight cars. */
+export function carsFromLegacy(c: CarMix | LegacyCarCounts): CarMix {
+  return cleanMix(fromLegacy(c));
+}
+
+function fromLegacy(c: CarMix | LegacyCarCounts): CarMix {
+  if (!('passengerCars' in c) && !('freightCars' in c)) return c as CarMix;
+  const old = c as LegacyCarCounts;
+  return { coach: old.passengerCars ?? 0, 'legacy-freight': old.freightCars ?? 0 };
+}
+
 /** Consecutive tile pairs of a path. */
 const pairs = (path: readonly Coord[]): [Coord, Coord][] =>
   path.slice(1).map((c, i) => [path[i]!, c] as [Coord, Coord]);
-
-const carCount = (c: CarCounts): number => c.passengerCars + c.freightCars;

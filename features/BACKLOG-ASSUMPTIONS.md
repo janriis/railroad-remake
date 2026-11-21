@@ -175,3 +175,24 @@ sim exists.
 - Fixture bonds ("the company has N bonds outstanding") are issued at 5%, 6%, 7% ... in order and give no cash.
 - The price history has one entry per month end, none for the starting price.
 - Equity in the price uses the live state at month end, after that month's charges.
+
+## m7-rolling-stock
+
+- The "<type>" in "a stop order can use at most the train's N <type> cars" is the car's id from the table in
+  docs/rolling-stock.md: coach, baggage, boxcar, hopper, covered-hopper, flatcar, legacy-freight (for example
+  "the train's 1 boxcar cars").
+- The legacy freight car's price is not in the doc; scenarios assume the old freight car price of $8,000, so it
+  resells for $4,000.
+- Car and stop tables: a type left out means none of it (owned or coupled). A stop row with no counts at all is
+  "no order" (cars stay as they are). Stored orders compare equal whether a type is omitted or 0.
+- Stop orders and fixtures check "at most the number owned" per type, not in total; orders that no longer fit
+  after a change of owned cars or a replace are dropped type by type.
+- Goods load in the order they arrived at the station (fixture order), each into coupled cars that can carry it.
+  Grain, which both boxcars and covered hoppers carry, fills every coupled car that can take it (boxcar 20 +
+  covered hopper 35 = 55); in what order the two types fill is not specified.
+- Loading when a train owns both a typed car and legacy freight cars for the same cargo is not specified.
+- Fixture trains ("a train with these cars exists ...") couple all their cars and ignore the locomotive's car
+  limit and the on-sale year, like `addTrain` today. Commands (buy, change cars) do check both.
+- The covered hopper is on sale from 1 January 1930; 1929 is the last year it is rejected.
+- Cargo already on board that no longer fits after cars are removed is trimmed as today (not re-specified).
+- The map sprites and the UI steppers are not specified here.

@@ -43,6 +43,17 @@ owns a number of cars of each type and couples a mix of them at each stop.
   order: coaches, baggage, boxcars, hoppers, covered hoppers, flatcars, legacy freight. The last ones are
   sold first.
 
+## Lead decisions while specifying (2026-11-21)
+
+- **No free swapping between types.** A train can only couple cars it owns. A stop order is a count per
+  type, each at most the number of that type owned. This replaces the old rule that swapped passenger and
+  freight cars for free at a stop.
+- **Fill order.** When several coupled types can carry the same goods, the specialised cars fill first:
+  coach, baggage car, hopper, covered hopper, flatcar, boxcar, then legacy freight car last.
+- **Legacy freight car price:** $8,000, so it resells for $4,000.
+- **Rejection text:** uses the type id, for example "a stop order can use at most the train's 1 boxcar
+  cars".
+
 ## UI notes
 
 - **Buy and Cars sheets:** one stepper per car type that is on sale.

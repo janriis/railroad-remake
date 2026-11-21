@@ -6,11 +6,14 @@ import {
   CARGO_TYPES,
   INDUSTRY_KINDS,
   type BuildingKind,
+  type CarType,
   type Cargo,
   type IndustryKind,
   type LocoModel,
 } from '../../src/sim/config';
 import { TERRAINS, type Coord, type Terrain } from '../../src/sim/types';
+import type { CarMix } from '../../src/sim/cars';
+import { CAR_NAME_PATTERN, carType, parseCarList } from './cars';
 
 /** (3, 4) */
 defineParameterType({
@@ -73,4 +76,18 @@ defineParameterType({
   name: 'model',
   regexp: new RegExp(LOCO_MODELS.map((m) => LOCO[m].short).join('|')),
   transformer: (s: string): LocoModel => LOCO_MODELS.find((m) => LOCO[m].short === s)!,
+});
+
+/** coach(es) | baggage car(s) | boxcar(s) | (coal) hopper(s) | covered hopper(s) | flatcar(s) | legacy freight car(s) */
+defineParameterType({
+  name: 'car',
+  regexp: new RegExp(CAR_NAME_PATTERN),
+  transformer: (s: string): CarType => carType(s),
+});
+
+/** "2 coaches and 1 boxcar", "3 coaches, 1 baggage car and 0 boxcars" */
+defineParameterType({
+  name: 'carlist',
+  regexp: new RegExp(`\\d+ (?:${CAR_NAME_PATTERN})(?:(?:, | and )\\d+ (?:${CAR_NAME_PATTERN}))*`),
+  transformer: (s: string): CarMix => parseCarList(s),
 });

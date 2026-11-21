@@ -4,14 +4,14 @@ Plan: starter. Budget envelopes are in [PLAN.md §6](PLAN.md#6-graphics-with-hig
 Re-read the balance from the account (`higgsfield account` or the Higgsfield `balance` tool) after every
 batch. Do not estimate it.
 
-**Current balance: 309.5** (as of 2026-11-21, re-read after the real-roster locomotives)
+**Current balance: 304.5** (as of 2026-11-21, re-read after the M7 car sprites)
 
 | Envelope | Budget | Spent | Left |
 |---|---:|---:|---:|
 | Style exploration | 30 | 5 | 25 |
 | Terrain + track tiles | 80 | 12.5 | 67.5 |
 | Buildings, stations, industries | 90 | 18.75 | 71.25 |
-| Locomotives & cars | 80 | 15 | 65 |
+| Locomotives & cars | 80 | 20 | 60 |
 | UI + title/marketing | 40 | 0 | 40 |
 | Reserve | 40.75 | 0 | 40.75 |
 
@@ -25,3 +25,4 @@ batch. Do not estimate it.
 | 2026-11-21 | M5 sprites: coal mine, coal yard | gpt_image_2_6, high, 1k, 1:1, flat.jpg as reference | 2 × 1.25 = 2.5 | 323.25 | 320.75 | Under the 30-credit approval threshold |
 | 2026-11-21 | M6 locomotives: Ironside, Courier, Hauler, Pathfinder (Pioneer reuses `loco`) | gpt_image_2_6, high, 1k, 1:1, flat.jpg as reference | 4 × 1.25 = 5 | 320.75 | 315.75 | Under the 30-credit approval threshold |
 | 2026-11-21 | Real roster: 2-6-0 Mogul, 4-6-2 Pacific, 2-8-2 Mikado, 4-8-4 Northern, road-switcher diesel (earlier sprites reused for American, Ten-Wheeler, Consolidation, Atlantic, streamliner) | gpt_image_2_6, high, 1k, 1:1, flat.jpg as reference | 5 × 1.25 = 6.25 | 315.75 | 309.5 | Under the 30-credit approval threshold |
+| 2026-11-21 | M7 cars: mail & baggage car, boxcar, coal hopper, covered hopper (coach and flatcar reuse earlier sprites) | gpt_image_2_6, high, 1k, 1:1, flat.jpg as reference | 4 × 1.25 = 5 | 309.5 | 304.5 | Under the 30-credit approval threshold |

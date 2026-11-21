@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { LOCO, LOCO_MODELS, OVERHAUL_RATE, PASSENGER_CAR_COST, type LocoModel } from '../src/sim/config';
+import { CAR, LOCO, LOCO_MODELS, OVERHAUL_RATE, type LocoModel } from '../src/sim/config';
 import {
   act,
   atYear,
@@ -253,7 +253,7 @@ test('9. Locomotives: buy a chosen model, read model and age, overhaul at a stat
   await expect(sheet.locator('.model-card')).toHaveCount(onSale.length);
   await act(page, `model:${pick}`).click();
   await expect(act(page, `model:${pick}`)).toHaveAttribute('aria-pressed', 'true');
-  const price = LOCO[pick].price + 2 * PASSENGER_CAR_COST;
+  const price = LOCO[pick].price;
   await expect(sheet.locator('.big')).toContainText(price.toLocaleString('en-US'));
   const before = await cashOf(page);
   await act(page, 'buy').click();
@@ -282,5 +282,33 @@ test('9. Locomotives: buy a chosen model, read model and age, overhaul at a stat
   await expect(page.locator('#toast')).toContainText('retired');
   await expect(page.locator('#roster-title')).toHaveText('Trains (1)');
   expect(await cashOf(page)).toBeGreaterThan(cash2);
+  expect(errors).toEqual([]);
+});
+
+test('10. Car types: buy a locomotive with a coal hopper and a coach, see both in the train sheet', async ({
+  page,
+}, info) => {
+  const errors = await boot(page, fixtureSave({ track: true, stations: [-6, 6] }));
+  await tool(page, 'train').click();
+  await tapTile(page, info, at(6));
+  const sheet = page.locator('#sheet-msg');
+  await expect(sheet).toContainText('Buy a train');
+  await act(page, 'c+:hopper').click();
+  await act(page, 'c+:coach').click();
+  const model = (await sheet.locator('.model-card.on').getAttribute('data-act'))!.replace('model:', '');
+  const price = LOCO[model as LocoModel].price + CAR.hopper.price + CAR.coach.price;
+  await expect(sheet.locator('.big')).toContainText(price.toLocaleString('en-US'));
+  const before = await cashOf(page);
+  await act(page, 'buy').click();
+  await expect(sheet).toContainText('Add stops');
+  expect(await cashOf(page)).toBe(before - price);
+  const saved = (await savedGame(page)).trains[0]!;
+  expect(saved.cars).toEqual({ coach: 1, hopper: 1 });
+  await tool(page, 'pan').click();
+  await trainRow(page, 0).locator('.train-row').click();
+  await expect(sheet).toContainText('1 coach');
+  await expect(sheet).toContainText('1 coal hopper');
+  await expect(sheet).toContainText('coach 0/40');
+  await expect(sheet).toContainText('coal hopper 0/25');
   expect(errors).toEqual([]);
 });

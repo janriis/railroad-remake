@@ -1,4 +1,6 @@
-import { TOWN_RADIUS, type IndustryKind, type LocoModel } from '../sim/config';
+import { CAR_KEEP_ORDER, TOWN_RADIUS, type CarType, type IndustryKind, type LocoModel } from '../sim/config';
+import { carsOf } from '../sim/cars';
+import { CAR_TINT } from './cars';
 import type { Station } from '../sim/game';
 import type { GameMap } from '../sim/map';
 import { stepUnits } from '../sim/pathfinding';
@@ -485,7 +487,7 @@ export interface Pose {
   y: number;
   /** Direction of travel in radians. */
   a: number;
-  kind: 'loco' | 'passenger' | 'freight';
+  kind: 'loco' | CarType;
   /** Locomotive model (loco poses only), which picks the sprite. */
   model?: LocoModel;
 }
@@ -558,8 +560,8 @@ export function trainPoses(t: Train, extra = 0): Pose[] {
   };
   const out: Pose[] = [{ ...poseAt(0.1, 'loco'), x: head.x, y: head.y, model: t.model }];
   let d = 0.52;
-  for (let i = 0; i < t.passengerCars; i++, d += CAR_GAP) out.push(poseAt(d, 'passenger'));
-  for (let i = 0; i < t.freightCars; i++, d += CAR_GAP) out.push(poseAt(d, 'freight'));
+  for (const type of CAR_KEEP_ORDER)
+    for (let i = 0; i < carsOf(t.cars, type); i++, d += CAR_GAP) out.push(poseAt(d, type));
   return out;
 }
 
@@ -584,7 +586,7 @@ function drawVehicleProcedural(ctx: CanvasRenderingContext2D, p: Pose, colour: s
     ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.fillRect(-0.05, -0.1, 0.24, 0.06);
-  } else if (p.kind === 'passenger') {
+  } else if (isPassengerCar(p.kind)) {
     ctx.fillStyle = colour;
     ctx.fillRect(-0.2, -0.12, 0.4, 0.24);
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
@@ -603,6 +605,7 @@ function drawVehicleProcedural(ctx: CanvasRenderingContext2D, p: Pose, colour: s
     ctx.fillRect(-0.2, 0.0, 0.4, 0.02);
     ctx.strokeRect(-0.2, -0.12, 0.4, 0.24);
   }
+  if (p.kind !== 'loco') drawCarMark(ctx, p.kind, 0.4, 0.24);
   ctx.restore();
 }
 
@@ -721,22 +724,46 @@ export function drawStation(ctx: CanvasRenderingContext2D, st: Station): void {
 /** The atlas frame for a locomotive model: `loco-<model>`, or the generic `loco` when there is none. */
 const locoFrame = (model: LocoModel): string => (frame(`loco-${model}`) ? `loco-${model}` : 'loco');
 
-const VEHICLE_LENGTH = { loco: 0.68, passenger: 0.46, freight: 0.46 } as const;
+const isPassengerCar = (k: Pose['kind']): boolean => k === 'coach' || k === 'baggage';
+
+/** The atlas frame for a car type: `car-<type>`, else the passenger or freight car sprite. */
+const carFrame = (type: CarType): string =>
+  frame(`car-${type}`)
+    ? `car-${type}`
+    : type === 'coach' || type === 'baggage'
+      ? 'car-passenger'
+      : 'car-freight';
+
+/**
+ * Marks a car type on top of a shared sprite (until it has its own): a tinted body, lower for a flatcar,
+ * with a dark roof line for a covered hopper. Drawn centred on the car, `len` by `h` tile units.
+ */
+function drawCarMark(ctx: CanvasRenderingContext2D, type: CarType, len: number, h: number): void {
+  const tint = CAR_TINT[type];
+  if (!tint || frame(`car-${type}`)) return;
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = tint;
+  if (type === 'flatcar') ctx.fillRect(-len / 2, h * 0.05, len, h * 0.3);
+  else if (type === 'hopper') {
+    ctx.fillRect(-len / 2, -h * 0.4, len, h * 0.8);
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = '#e8e2d4';
+    ctx.fillRect(-len * 0.1, -h * 0.5, len * 0.2, h * 0.12);
+  } else ctx.fillRect(-len / 2, -h * 0.4, len, h * 0.8);
+  ctx.restore();
+}
+
+const VEHICLE_LENGTH = 0.46;
+const LOCO_LENGTH = 0.68;
 
 /** Draws one vehicle at its pose (tile units); a coloured stripe along its side shows the train colour. */
 export function drawVehicle(ctx: CanvasRenderingContext2D, p: Pose, colour: string): void {
   const img = atlasImage();
-  const name =
-    p.kind === 'loco'
-      ? p.model
-        ? locoFrame(p.model)
-        : 'loco'
-      : p.kind === 'passenger'
-        ? 'car-passenger'
-        : 'car-freight';
+  const name = p.kind === 'loco' ? (p.model ? locoFrame(p.model) : 'loco') : carFrame(p.kind);
   const f = img ? frame(name) : undefined;
   if (!img || !f) return drawVehicleProcedural(ctx, p, colour);
-  const len = VEHICLE_LENGTH[p.kind];
+  const len = p.kind === 'loco' ? LOCO_LENGTH : VEHICLE_LENGTH;
   const h = (len * f.h) / f.w;
   ctx.save();
   ctx.translate(p.x, p.y);
@@ -751,5 +778,6 @@ export function drawVehicle(ctx: CanvasRenderingContext2D, p: Pose, colour: stri
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, f.x, f.y, f.w, f.h, -len / 2, -h / 2, len, h);
+  if (p.kind !== 'loco') drawCarMark(ctx, p.kind, len, h);
   ctx.restore();
 }

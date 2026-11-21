@@ -41,7 +41,7 @@ describe('save and load', () => {
     expect(r.ok).toBe(true);
     game.buildStation('small', a!);
     game.buildStation('medium', b!);
-    const bought = game.buyTrain({ at: a!, locomotive: true, passengerCars: 2 });
+    const bought = game.buyTrain({ at: a!, locomotive: true, cars: { coach: 2 } });
     expect(bought.ok).toBe(true);
     if (bought.ok) expect(game.setRoute(bought.train.id, [a!, b!]).ok).toBe(true);
     game.advanceDays(31); // past a month-end, so running costs are booked

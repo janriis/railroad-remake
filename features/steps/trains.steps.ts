@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { LOCO, LOCO_MODELS } from '../../src/sim/config';
+import { cleanMix, totalCars, type CarMix } from '../../src/sim/cars';
+import { carType, parseCarList } from '../support/cars';
 import { Given, Then, When, type DataTable } from '@cucumber/cucumber';
 import { STATION_SIZES, TICKS_PER_DAY, type StationSize } from '../../src/sim/config';
-import type { CarCounts } from '../../src/sim/trains';
 import { sameCoord, type Coord } from '../../src/sim/types';
 import type { SimWorld } from '../support/world';
 
@@ -52,14 +53,12 @@ Then(
 When(
   /^I buy (.+?) at (?:the station at )?\((\d+), (\d+)\)$/,
   function (this: SimWorld, what: string, x: string, y: string) {
-    const count = (re: RegExp) => Number(what.match(re)?.[1] ?? 0);
     const loco = what.match(/\ban? (?:([\w -]+?) )?locomotive\b/);
     const order = {
       at: { x: Number(x), y: Number(y) },
       locomotive: loco !== null,
       ...(loco?.[1] ? { model: LOCO_MODELS.find((m) => LOCO[m].short === loco[1])! } : {}),
-      passengerCars: count(/(\d+) passenger cars?/),
-      freightCars: count(/(\d+) freight cars?/),
+      cars: parseCarList(what),
     };
     let bought: ReturnType<SimWorld['game']['buyTrain']> | undefined;
     this.run((g) => (bought = g.buyTrain(order)));
@@ -72,7 +71,7 @@ Then('the company should own {int} train(s)', function (this: SimWorld, n: numbe
 });
 
 Then('the train should have {int} cars', function (this: SimWorld, n: number) {
-  assert.equal(this.train.passengerCars + this.train.freightCars, n);
+  assert.equal(totalCars(this.train.cars), n);
 });
 
 // --- Train fixtures ------------------------------------------------------------
@@ -181,48 +180,42 @@ Then('the trains should be reported as deadlocked', function (this: SimWorld) {
 
 // --- Cars and stop orders --------------------------------------------------------
 
-Given(
-  'the train has {int} passenger car(s) and {int} freight car(s)',
-  function (this: SimWorld, p: number, f: number) {
-    this.train.passengerCars = p;
-    this.train.freightCars = f;
-    this.train.owned = { passengerCars: p, freightCars: f };
-  },
-);
+Given('the train owns {carlist}', function (this: SimWorld, mix: CarMix) {
+  this.train.cars = cleanMix(mix);
+  this.train.owned = cleanMix(mix);
+});
 
 Then('the train should own {int} car(s)', function (this: SimWorld, n: number) {
-  assert.equal(this.train.owned.passengerCars + this.train.owned.freightCars, n);
+  assert.equal(totalCars(this.train.owned), n);
 });
 
 Then('the train should be carrying no cargo', function (this: SimWorld) {
   assert.deepEqual(this.train.cargo, []);
 });
 
-When(
-  "I change the train's cars to {int} passenger car(s) and {int} freight car(s)",
-  function (this: SimWorld, p: number, f: number) {
-    this.run((g) => g.changeCars(this.train.id, { passengerCars: p, freightCars: f }));
-  },
-);
+When("I change the train's cars to {carlist}", function (this: SimWorld, mix: CarMix) {
+  this.run((g) => g.changeCars(this.train.id, mix));
+});
 
-Then(
-  'the train should haul {int} passenger car(s) and {int} freight car(s)',
-  function (this: SimWorld, p: number, f: number) {
-    assert.deepEqual([this.train.passengerCars, this.train.freightCars], [p, f]);
-  },
-);
+Then('the train should haul {carlist}', function (this: SimWorld, mix: CarMix) {
+  assert.deepEqual(cleanMix(this.train.cars), cleanMix(mix));
+});
 
 Then('the train should have no stop orders', function (this: SimWorld) {
   assert.ok(this.train.stopOrders.every((o) => o === null));
 });
 
-function stopsFromTable(table: DataTable): { stops: Coord[]; orders: (CarCounts | null)[] } {
+/** A stop table: a `stop` column and one column per car type (plural names); all blank = no order. */
+export function stopsFromTable(table: DataTable): { stops: Coord[]; orders: (CarMix | null)[] } {
   const rows = table.hashes();
   return {
     stops: rows.map((r) => parseCoords(r['stop']!)[0]!),
     orders: rows.map((r) => {
-      const [p, f] = [r['passenger cars']?.trim(), r['freight cars']?.trim()];
-      return p || f ? { passengerCars: Number(p || 0), freightCars: Number(f || 0) } : null;
+      const cells = Object.entries(r).filter(([k, v]) => k !== 'stop' && v.trim() !== '');
+      if (cells.length === 0) return null;
+      const mix: CarMix = {};
+      for (const [k, v] of cells) mix[carType(k)] = Number(v);
+      return cleanMix(mix);
     }),
   };
 }

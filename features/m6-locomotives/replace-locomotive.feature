@@ -9,8 +9,8 @@ Feature: Replacing locomotives
     trade-in = round(old price x (0.5 - 0.4 x min(1, age / working life)))
   which is 50% of the price when new, falling to 10% at the end of the working life.
   Cars, route, stop orders and cargo stay; the new locomotive starts at age 0 and sets the train's speed.
-  Extra cars are sold (passenger cars are kept first) at the car resale rate of 50%
-  (passenger car $5,000, freight car $4,000).
+  Extra cars are sold (coaches are kept first) at the car resale rate of 50%
+  (coach $5,000, boxcar $4,000).
 
   Fixture steps that name a calendar date come before the steps that create trains.
 
@@ -102,40 +102,40 @@ Feature: Replacing locomotives
   Scenario: Replacing keeps the cars, route and stop orders
     Given the calendar starts on 1 January 1880
     And a train exists at the station at (2, 5)
-    And the train has 2 passenger cars and 0 freight cars
+    And the train owns 2 coaches and 2 boxcars
     And the train has these stops:
-      | stop    | passenger cars | freight cars |
+      | stop    | coaches | boxcars |
       | (2, 5)  | 2              | 0            |
       | (18, 5) | 0              | 2            |
     When I replace the train's locomotive with a Ten-Wheeler
     Then the command succeeds
-    And the train should haul 2 passenger cars and 0 freight cars
+    And the train should haul 2 coaches and 2 boxcars
     And the train route should have 2 stops
     And the train should have these stops:
-      | stop    | passenger cars | freight cars |
+      | stop    | coaches | boxcars |
       | (2, 5)  | 2              | 0            |
       | (18, 5) | 0              | 2            |
 
-  # Consolidation (8 cars) -> Mogul (6 cars): 2 freight cars too many (passenger cars are kept first).
-  # Trade-in Consolidation age 0: 50% x $90,000 = $45,000. Sale of 2 freight cars: 2 x $4,000 = $8,000.
+  # Consolidation (8 cars) -> Mogul (6 cars): 2 boxcars too many (coaches are kept first).
+  # Trade-in Consolidation age 0: 50% x $90,000 = $45,000. Sale of 2 boxcars: 2 x $4,000 = $8,000.
   # Cost: $65,000 - $45,000 - $8,000 = $12,000.
   Scenario: Cars the new model cannot pull are sold
     Given the calendar starts on 1 January 1900
-    And a Consolidation train with 3 passenger cars and 5 freight cars exists at the station at (2, 5)
+    And a Consolidation train with 3 coaches and 5 boxcars exists at the station at (2, 5)
     When I replace the train's locomotive with a Mogul
     Then the command succeeds
     And it cost $12,000
-    And the train should haul 3 passenger cars and 3 freight cars
+    And the train should haul 3 coaches and 3 boxcars
 
-  # 7 passenger cars and 1 freight car on a Consolidation -> Mogul holds 6: keep 6 passenger cars, sell
-  # 1 passenger car ($5,000) and the freight car ($4,000) = $9,000.
+  # 7 coaches and 1 boxcar on a Consolidation -> Mogul holds 6: keep 6 coaches, sell
+  # 1 coach ($5,000) and the boxcar ($4,000) = $9,000.
   # Cost: $65,000 - $45,000 - $9,000 = $11,000.
-  Scenario: Passenger cars are kept before freight cars
+  Scenario: Coaches are kept before boxcars
     Given the calendar starts on 1 January 1900
-    And a Consolidation train with 7 passenger cars and 1 freight car exists at the station at (2, 5)
+    And a Consolidation train with 7 coaches and 1 boxcar exists at the station at (2, 5)
     When I replace the train's locomotive with a Mogul
     Then it cost $11,000
-    And the train should haul 6 passenger cars and 0 freight cars
+    And the train should haul 6 coaches and 0 boxcars
 
   Scenario: A replacement needs the train to be at a station
     Given the calendar starts on 1 January 1880

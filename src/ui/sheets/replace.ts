@@ -1,6 +1,8 @@
 import { LOCO, OVERHAUL_RATE, type LocoModel } from '../../sim/config';
 import type { Train } from '../../sim/trains';
 import { btn } from '../dom';
+import { mixText } from '../cars';
+import { totalCars } from '../../sim/cars';
 import { cargoBreakdown, humanError, loadText, money, plural, trainName } from '../format';
 import { atStation, modelCard, netText, replacePreview, retireRefund } from '../models';
 import type { Ui } from '../state';
@@ -29,13 +31,7 @@ export function beginReplace(ui: Ui, train: Train): void {
   ui.renderSheet();
 }
 
-const soldText = (p: ReturnType<typeof replacePreview>): string => {
-  const parts = [
-    p.soldPassenger ? plural(p.soldPassenger, 'passenger car') : '',
-    p.soldFreight ? plural(p.soldFreight, 'freight car') : '',
-  ].filter(Boolean);
-  return parts.join(' and ');
-};
+const soldText = (p: ReturnType<typeof replacePreview>): string => mixText(p.sold, '');
 
 /** Model picker for swapping a train's locomotive: price, trade-in, cars sold and the net cost. */
 export function renderReplaceSheet(ui: Ui): void {
@@ -49,7 +45,7 @@ export function renderReplaceSheet(ui: Ui): void {
   const sel = r.model;
   const p = sel ? replacePreview(ui.game, train, sel) : null;
   const broke = !!p && p.net > ui.game.cash;
-  const sells = !!p && p.soldPassenger + p.soldFreight > 0;
+  const sells = !!p && p.soldCount > 0;
   const acts: Record<string, () => void> = {
     back: () => {
       ui.replacing = null;
@@ -139,7 +135,7 @@ export function renderRetireSheet(ui: Ui): void {
   const cargo = loadText(train) && train.cargo.some((l) => l.units > 0);
   ui.setSheet(
     `<div class="sheet-title">Retire ${trainName(ui, train)}?</div>` +
-      `<div class="info">The ${LOCO[train.model].name} and its ${plural(train.owned.passengerCars + train.owned.freightCars, 'car')} are sold for <b>${money(refund)}</b>.</div>` +
+      `<div class="info">The ${LOCO[train.model].name} and its ${plural(totalCars(train.owned), 'car')} are sold for <b>${money(refund)}</b>.</div>` +
       (cargo ? `<div class="warn">The cargo on board (${cargoBreakdown(train)}) is lost.</div>` : '') +
       `<div class="btns">${btn('back', 'Keep it')}${btn('retire', `Retire for ${money(refund)}`, 'primary')}</div>`,
     {

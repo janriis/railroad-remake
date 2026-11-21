@@ -114,7 +114,7 @@ Feature: Station buildings
     And a timber camp exists at (12, 5)
     And a small station exists at (12, 5)
     And the station at (4, 5) has a sawmill
-    And a train with 1 freight cars exists at the station at (12, 5) with the route (12, 5), (4, 5)
+    And a train with 1 flatcar exists at the station at (12, 5) with the route (12, 5), (4, 5)
     When 2 months pass
     Then the sawmill in the station at (4, 5) should have received timber
     And the station at (4, 5) should have 0 timber waiting
@@ -202,7 +202,7 @@ Feature: Station buildings
     And a small station exists at (12, 5)
     And the station at (4, 5) has a sawmill
     And the sawmill in the station at (4, 5) has received 80 timber
-    And a train with 1 freight cars exists at the station at (4, 5) with the route (4, 5), (12, 5)
+    And a train with 1 flatcar exists at the station at (4, 5) with the route (4, 5), (12, 5)
     When 1 months pass
     And 5 days pass
     Then the station at (4, 5) should have 0 lumber waiting

@@ -2,13 +2,12 @@ import { OPPOSING_TRAFFIC_PENALTY_TILES, TICKS_PER_DAY, TILE_UNITS, type LocoMod
 import { heading } from './geometry';
 import { findTrackPath, stepUnits } from './pathfinding';
 import type { Lot } from './cargo';
+import type { CarMix } from './cars';
 import type { TrackNetwork } from './track';
 import { coordKey, sameCoord, type Coord } from './types';
 
-export interface CarCounts {
-  readonly passengerCars: number;
-  readonly freightCars: number;
-}
+/** A stop order: the cars of each type to couple from that stop on (see cars.ts). */
+export type CarCounts = CarMix;
 
 export type TrainStatus = 'idle' | 'moving' | 'waiting' | 'at-stop' | 'broken-down';
 
@@ -31,11 +30,10 @@ export interface Train {
   boughtAt: number;
   /** Broken down until this game hour; it stands still and keeps its place on the line. */
   brokenUntil: number | null;
-  /** Cars coupled right now (carry cargo). */
-  passengerCars: number;
-  freightCars: number;
-  /** Cars the train owns; stop orders couple any number of them, the rest ride along as spares. */
-  owned: CarCounts;
+  /** Cars coupled right now, by type (only these carry cargo). */
+  cars: CarMix;
+  /** Cars the train owns; stop orders couple some of them, the rest ride along as spares. */
+  owned: CarMix;
   route: Coord[];
   /** Per stop (same index as `route`): the cars to leave that stop with, or null to keep them. */
   stopOrders: (CarCounts | null)[];
@@ -179,11 +177,12 @@ function planPath(ctx: MovementContext, t: Train, dest: Coord): Coord[] | null {
   const penalty = OPPOSING_TRAFFIC_PENALTY_TILES * TILE_UNITS;
   const extraCost = (a: Coord, b: Coord) =>
     !ctx.track.isDouble(a, b) && opposing.has(`${coordKey(a)}>${coordKey(b)}`) ? penalty : 0;
-  // Carry on the way the train is facing; it may only reverse at a station (or if it has
-  // never moved, e.g. a train just placed on the line).
+  // Carry on the way the train is facing (turning at most 45 degrees per tile). A train that has
+  // never moved may set off either way.
   const facing = t.prev ? heading(t.prev, t.at) : null;
   const ahead = findTrackPath(ctx.track, t.at, dest, { extraCost, heading: facing });
-  if (ahead || facing === null || !ctx.isStation(t.at)) return ahead;
+  if (ahead || facing === null) return ahead;
+  // No way on in the direction it faces (e.g. its route changed while out on the line): it reverses.
   return findTrackPath(ctx.track, t.at, dest, { extraCost });
 }
 

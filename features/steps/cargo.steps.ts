@@ -11,6 +11,7 @@ import type { Industry } from '../../src/sim/cargo';
 import { TOWN_WEIGHT_TOTAL } from '../../src/sim/cargo';
 import type { Station } from '../../src/sim/game';
 import type { Town } from '../../src/sim/mapgen';
+import type { CarMix } from '../../src/sim/cars';
 import type { Coord } from '../../src/sim/types';
 import { parseCoords } from './trains.steps';
 import type { SimWorld } from '../support/world';
@@ -88,7 +89,7 @@ Given('the passengers of {string} are being carried away', function (this: SimWo
   const to = { x: from.at.x + 8, y: from.at.y };
   this.game.addTown(`${name} Terminus`, to, 1_000);
   this.game.addStation('small', to);
-  const train = this.game.addTrain({ at: from.at, passengerCars: 3 });
+  const train = this.game.addTrain({ at: from.at, cars: { coach: 3, baggage: 1 } });
   const r = this.game.setRoute(train.id, [from.at, to]);
   assert.ok(r.ok, !r.ok ? r.error : '');
   this.normalTrains.push(train);
@@ -165,10 +166,9 @@ Then(
 // --- Trains ---------------------------------------------------------------------
 
 Given(
-  'a train with {int} {word} cars exists at the station at {coord} with the route {}',
-  function (this: SimWorld, n: number, kind: string, at: Coord, route: string) {
-    assert.ok(kind === 'passenger' || kind === 'freight', `unknown car kind ${kind}`);
-    const train = this.game.addTrain({ at, [kind === 'passenger' ? 'passengerCars' : 'freightCars']: n });
+  'a train with {carlist} exists at the station at {coord} with the route {}',
+  function (this: SimWorld, cars: CarMix, at: Coord, route: string) {
+    const train = this.game.addTrain({ at, cars });
     const r = this.game.setRoute(train.id, parseCoords(route));
     assert.ok(r.ok, !r.ok ? r.error : '');
     this.normalTrains.push(train);

@@ -10,6 +10,7 @@ import {
   timeOf,
   type LedgerYear,
 } from '../../src/sim/economy';
+import type { CarMix } from '../../src/sim/cars';
 import type { Coord } from '../../src/sim/types';
 import type { SimWorld } from '../support/world';
 
@@ -50,16 +51,16 @@ Then(
 // --- Train fixtures -------------------------------------------------------------
 
 Given(
-  'a train with {int} passenger cars exists at the station at {coord}',
-  function (this: SimWorld, passengerCars: number, at: Coord) {
-    this.normalTrains.push(this.game.addTrain({ at, passengerCars }));
+  'a train with {carlist} exists at the station at {coord}',
+  function (this: SimWorld, cars: CarMix, at: Coord) {
+    this.normalTrains.push(this.game.addTrain({ at, cars }));
   },
 );
 
 Given(
   '{int} trains with {int} cars each exist at the station at {coord}',
-  function (this: SimWorld, n: number, passengerCars: number, at: Coord) {
-    for (let i = 0; i < n; i++) this.normalTrains.push(this.game.addTrain({ at, passengerCars }));
+  function (this: SimWorld, n: number, coaches: number, at: Coord) {
+    for (let i = 0; i < n; i++) this.normalTrains.push(this.game.addTrain({ at, cars: { coach: coaches } }));
   },
 );
 

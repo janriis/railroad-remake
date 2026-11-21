@@ -97,7 +97,7 @@ Feature: Locomotive models
 
   Scenario: A model that is retired from sale keeps running in trains already bought
     Given the calendar starts on 1 January 1890
-    And an American train with 0 passenger cars and 0 freight cars exists at the station at (2, 5)
+    And an American train with 0 coaches and 0 boxcars exists at the station at (2, 5)
     When 2 years pass
     Then the train should be an American
     When I buy an American locomotive at the station at (2, 5)
@@ -112,7 +112,7 @@ Feature: Locomotive models
   # Road switcher 12 (replaces the old fixed limit of 6).
   Scenario Outline: A model can pull as many cars as its maximum
     Given the calendar starts on 1 January <year>
-    When I buy <article> <model> locomotive with <cars> passenger cars at the station at (2, 5)
+    When I buy <article> <model> locomotive with <cars> coaches at the station at (2, 5)
     Then the command succeeds
     And the train should have <cars> cars
 
@@ -131,7 +131,7 @@ Feature: Locomotive models
 
   Scenario Outline: A model cannot pull more cars than its maximum
     Given the calendar starts on 1 January <year>
-    When I buy <article> <model> locomotive with <cars> passenger cars at the station at (2, 5)
+    When I buy <article> <model> locomotive with <cars> coaches at the station at (2, 5)
     Then the command is rejected with "too many cars"
     And no money was spent
 
@@ -151,16 +151,16 @@ Feature: Locomotive models
   Scenario: Changing cars is limited by the model, not by a fixed number
     Given the calendar starts on 1 January 1910
     And a Mikado train exists at the station at (2, 5)
-    When I change the train's cars to 6 passenger cars and 4 freight cars
+    When I change the train's cars to 6 coaches and 4 boxcars
     Then the command succeeds
-    When I change the train's cars to 6 passenger cars and 5 freight cars
+    When I change the train's cars to 6 coaches and 5 boxcars
     Then the command is rejected with "too many cars"
-    And the train should haul 6 passenger cars and 4 freight cars
+    And the train should haul 6 coaches and 4 boxcars
 
   # An American holds 4 cars, so adding a fifth is rejected.
   Scenario: An American cannot be given a fifth car
-    Given an American train with 4 passenger cars and 0 freight cars exists at the station at (2, 5)
-    When I change the train's cars to 4 passenger cars and 1 freight car
+    Given an American train with 4 coaches and 0 boxcars exists at the station at (2, 5)
+    When I change the train's cars to 4 coaches and 1 boxcar
     Then the command is rejected with "too many cars"
     And no money was spent
 
@@ -168,13 +168,13 @@ Feature: Locomotive models
   # the cars are changed.
   # Running cost for a month: American $2,000 + 6 cars x $200 = $3,200.
   Scenario: A train from an older save keeps its extra cars until they are changed
-    Given an American train with 6 passenger cars and 0 freight cars exists at the station at (2, 5)
+    Given an American train with 6 coaches and 0 boxcars exists at the station at (2, 5)
     When 1 months pass
-    Then the train should haul 6 passenger cars and 0 freight cars
+    Then the train should haul 6 coaches and 0 boxcars
     And the company should have paid $3,200 in train running costs
-    When I change the train's cars to 5 passenger cars and 0 freight cars
+    When I change the train's cars to 5 coaches and 0 boxcars
     Then the command is rejected with "too many cars"
-    When I change the train's cars to 4 passenger cars and 0 freight cars
+    When I change the train's cars to 4 coaches and 0 boxcars
     Then the command succeeds
 
   # The line is 16 tiles long and the train starts at the station at (2, 5), so after 1 day a train is at

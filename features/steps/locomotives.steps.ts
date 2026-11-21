@@ -3,8 +3,9 @@ import { Given, Then, When, type DataTable } from '@cucumber/cucumber';
 import { LOCO, type LocoModel } from '../../src/sim/config';
 import { DAYS_PER_YEAR } from '../../src/sim/economy';
 import { TICKS_PER_DAY } from '../../src/sim/config';
+import { cleanMix, type CarMix } from '../../src/sim/cars';
 import type { Coord } from '../../src/sim/types';
-import { parseCoords } from './trains.steps';
+import { parseCoords, stopsFromTable } from './trains.steps';
 import type { SimWorld } from '../support/world';
 
 // --- Fixtures ---------------------------------------------------------------------
@@ -17,9 +18,9 @@ Given(
 );
 
 Given(
-  'a/an {model} train with {int} passenger car(s) and {int} freight car(s) exists at the station at {coord}',
-  function (this: SimWorld, model: LocoModel, passengerCars: number, freightCars: number, at: Coord) {
-    this.normalTrains.push(this.game.addTrain({ at, model, passengerCars, freightCars }));
+  'a/an {model} train with {carlist} exists at the station at {coord}',
+  function (this: SimWorld, model: LocoModel, cars: CarMix, at: Coord) {
+    this.normalTrains.push(this.game.addTrain({ at, model, cars }));
   },
 );
 
@@ -126,16 +127,10 @@ Then('the train should have moved on from where it was remembered', function (th
 });
 
 Then('the train should have these stops:', function (this: SimWorld, table: DataTable) {
-  const rows = table.hashes();
+  const { stops, orders } = stopsFromTable(table);
+  assert.deepEqual(this.train.route, stops);
   assert.deepEqual(
-    this.train.route,
-    rows.map((r) => parseCoords(r['stop']!)[0]!),
-  );
-  assert.deepEqual(
-    this.train.stopOrders,
-    rows.map((r) => {
-      const [p, f] = [r['passenger cars']?.trim(), r['freight cars']?.trim()];
-      return p || f ? { passengerCars: Number(p || 0), freightCars: Number(f || 0) } : null;
-    }),
+    this.train.stopOrders.map((o) => (o ? cleanMix(o) : null)),
+    orders,
   );
 });

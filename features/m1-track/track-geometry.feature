@@ -7,7 +7,8 @@ Feature: Track geometry
   Rules: at any tile a train may run straight on or turn by one step of 45 degrees. New track may
   not turn more sharply than that, a new branch must join existing track at a gentle angle, and
   diagonal track may not cross other diagonal track between tiles (there is no junction there).
-  Track can cross straight over other track at a tile. Trains only reverse at stations.
+  Track can cross straight over other track at a tile. A route never reverses at a junction; a train
+  reverses at its stops, or where it stands when it has no way forward to its next stop.
 
   Background:
     Given a new game on a 20x20 map of plains
@@ -72,3 +73,13 @@ Feature: Track geometry
     Then the command is rejected with "no track connects (10, 5) and (8, 8)"
     When I assign the train the route (10, 5), (2, 5), (8, 8)
     Then the command succeeds
+
+  Scenario: A train whose next stop is behind it reverses on the line
+    Given existing track from (2, 5) to (18, 5)
+    And a small station exists at (2, 5)
+    And a small station exists at (18, 5)
+    And a train exists at the station at (2, 5) with the route (2, 5), (18, 5)
+    When 2 days pass
+    And I assign the train the route (2, 5), (18, 5)
+    And 3 days pass
+    Then the train's last stop should be (2, 5)

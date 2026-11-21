@@ -1,11 +1,12 @@
 import { btn } from '../dom';
+import { mixText } from '../cars';
+import { totalCars } from '../../sim/cars';
 import {
   ageText,
   cargoBreakdown,
   loadText,
   modelName,
   money,
-  plural,
   routeList,
   stationNameAt,
   statusText,
@@ -36,7 +37,7 @@ export function renderTrainSheet(ui: Ui, train: Train): void {
       `<div class="sub"><b>${modelName(train)}</b> · ${ageText(ui, train)} · ${money(g.locoRunningCost(train))}/month to run` +
       (worn ? ` · ${Math.round(g.breakdownChance(train) * 100)}% chance of a breakdown each month` : '') +
       `</div>` +
-      `<div class="sub">${plural(train.passengerCars, 'passenger car')}, ${plural(train.freightCars, 'freight car')}` +
+      `<div class="sub">${mixText(train.cars)}${totalCars(train.owned) > totalCars(train.cars) ? ` (${totalCars(train.owned)} owned)` : ''}` +
       (loadText(train) ? ` · ${loadText(train)}` : '') +
       `</div>` +
       (cargoBreakdown(train) ? `<div class="sub">Carrying ${cargoBreakdown(train)}</div>` : '') +

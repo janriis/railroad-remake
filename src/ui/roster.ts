@@ -6,12 +6,12 @@ import {
   carsText,
   loadText,
   modelName,
-  plural,
   stationNameAt,
   trainColour,
   trainName,
 } from './format';
 import { $, setText } from './dom';
+import { mixShort, mixText } from './cars';
 import { ROSTER_KEY } from './constants';
 import { beginSend, cancelTripOf } from './sheets/send';
 import { beginRouting } from './tools/route';
@@ -153,14 +153,8 @@ export function createRoster(ui: Ui): () => void {
       const name = trainName(ui, t);
       setText(row.name, name);
       row.swatch.style.backgroundColor = trainColour(ui, t);
-      const cars = [t.passengerCars ? `${t.passengerCars}P` : '', t.freightCars ? `${t.freightCars}F` : '']
-        .filter(Boolean)
-        .join(' ');
-      setText(row.consistText, cars || 'loco');
-      setText(
-        row.consistSr,
-        `Locomotive, ${plural(t.passengerCars, 'passenger car')}, ${plural(t.freightCars, 'freight car')}`,
-      );
+      setText(row.consistText, mixShort(t.cars, 'loco'));
+      setText(row.consistSr, `Locomotive, ${mixText(t.cars)}`);
       const chip = chipFor(t, ui);
       const worn = ui.game.isWornOut(t);
       row.wear.hidden = !worn;

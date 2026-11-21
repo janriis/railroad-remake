@@ -1,7 +1,10 @@
-import { CARGO, FREIGHT_CAR_CAPACITY, LOCO, PASSENGER_CAR_CAPACITY, TICKS_PER_DAY } from '../sim/config';
-import type { CarCounts, Train } from '../sim/trains';
+import { CAR, CAR_TYPES, LOCO, TICKS_PER_DAY } from '../sim/config';
+import { carsOf } from '../sim/cars';
+import type { Train } from '../sim/trains';
 import type { Station } from '../sim/game';
 import type { Coord } from '../sim/types';
+import type { CarMix } from '../sim/cars';
+import { mixShort } from './cars';
 import { TRAIN_COLOURS } from './render';
 import type { Ui } from './state';
 
@@ -118,17 +121,20 @@ export function statusText(ui: Ui, t: Train): string {
   return t.next ? 'Running' : 'At station';
 }
 
-/** Passengers+mail and freight on board against what the cars can hold. */
+/** Load per coupled car type: "coaches 62/80 passengers; coal hopper 25/25 coal". */
 export function loadText(t: Train): string {
-  let pax = 0;
-  let freight = 0;
-  for (const l of t.cargo)
-    if (CARGO[l.cargo].car === 'passenger') pax += l.units;
-    else freight += l.units;
   const parts: string[] = [];
-  if (t.passengerCars) parts.push(`${pax}/${t.passengerCars * PASSENGER_CAR_CAPACITY} passengers+mail`);
-  if (t.freightCars) parts.push(`${freight}/${t.freightCars * FREIGHT_CAR_CAPACITY} freight`);
-  return parts.join(', ');
+  for (const type of CAR_TYPES) {
+    const n = carsOf(t.cars, type);
+    if (!n) continue;
+    const lots = t.cargo.filter((l) => l.car === type && l.units > 0);
+    const units = lots.reduce((a, l) => a + l.units, 0);
+    const what = [...new Set(lots.map((l) => l.cargo))].join(', ');
+    parts.push(
+      `${n === 1 ? CAR[type].name : CAR[type].plural} ${units}/${n * CAR[type].capacity}${what ? ` ${what}` : ''}`,
+    );
+  }
+  return parts.join('; ');
 }
 export function cargoBreakdown(t: Train): string {
   const by = new Map<string, number>();
@@ -143,7 +149,4 @@ export function routeList(ui: Ui, stops: Coord[]): string {
   return stops.map((c, i) => `${i + 1}. ${stationNameAt(ui, c)}`).join(' → ');
 }
 
-export const carsText = (o: CarCounts): string =>
-  [o.passengerCars ? `${o.passengerCars}P` : '', o.freightCars ? `${o.freightCars}F` : '']
-    .filter(Boolean)
-    .join(' ') || 'no cars';
+export const carsText = (o: CarMix): string => mixShort(o, 'no cars');

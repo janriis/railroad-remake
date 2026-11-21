@@ -4,6 +4,7 @@ import {
   TOWN_RADIUS,
   TRANSIT_DECAY_PERCENT_PER_DAY,
   TRANSIT_GRACE_DAYS,
+  type CarType,
   type Cargo,
   type IndustryKind,
 } from './config';
@@ -12,6 +13,8 @@ import type { Coord } from './types';
 /** Cargo on board a train, remembered with where and when it was picked up. */
 export interface Lot {
   readonly cargo: Cargo;
+  /** The car type it rides in. */
+  readonly car: CarType;
   units: number;
   readonly from: Coord;
   /** Game time when it was loaded. */

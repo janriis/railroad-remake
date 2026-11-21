@@ -70,11 +70,11 @@ Feature: Overhauling locomotives
     Then the train should be in working order
 
   Scenario: An overhaul keeps the train's cars and route
-    Given an American train with 2 passenger cars and 0 freight cars exists at the station at (2, 5)
+    Given an American train with 2 coaches and 0 boxcars exists at the station at (2, 5)
     And the train has the route (2, 5), (18, 5)
     And the train is 6 years old
     When I overhaul the train
-    Then the train should haul 2 passenger cars and 0 freight cars
+    Then the train should haul 2 coaches and 0 boxcars
     And the train route should have 2 stops
 
   Scenario: An overhaul needs the train to be at a station

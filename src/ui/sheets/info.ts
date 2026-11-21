@@ -5,6 +5,7 @@ import {
   BUILDING_KINDS,
   BUILDING_REFUND_RATE,
   BUILDING_SLOTS,
+  CAR,
   CARGO_TYPES,
   DEPOSIT_CAP_MONTHS,
   INDUSTRY,
@@ -13,6 +14,7 @@ import {
   type BuildingKind,
 } from '../../sim/config';
 import { btn } from '../dom';
+import { carsFor } from '../cars';
 import { humanError, money, stationName, unit } from '../format';
 import { TOWN_WEIGHT_TOTAL, type Industry } from '../../sim/cargo';
 import { INDUSTRY_LABELS } from '../render';
@@ -21,7 +23,16 @@ export function stationInfoHtml(ui: Ui, st: Station): string {
   let h = '';
   const waiting = CARGO_TYPES.map((c) => [c, ui.game.waitingAt(st, c)] as const).filter(([, n]) => n > 0);
   h += `<div class="info"><b>Waiting:</b> ${
-    waiting.length ? waiting.map(([c, n]) => `${unit(n)} ${c}`).join(', ') : 'nothing right now'
+    waiting.length
+      ? waiting
+          .map(
+            ([c, n]) =>
+              `${unit(n)} ${c} — ${carsFor(c)
+                .map((t) => CAR[t].name)
+                .join(' or ')}`,
+          )
+          .join('; ')
+      : 'nothing right now'
   }</div>`;
   const towns = ui.game.towns
     .map((t) => [t, ui.game.townCoverage(t).get(st) ?? 0] as const)

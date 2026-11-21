@@ -1,11 +1,5 @@
-import {
-  CAR_RESALE_RATE,
-  FREIGHT_CAR_COST,
-  LOCO,
-  LOCO_MODELS,
-  PASSENGER_CAR_COST,
-  type LocoModel,
-} from '../sim/config';
+import { CAR_KEEP_ORDER, CAR_RESALE_RATE, LOCO, LOCO_MODELS, type LocoModel } from '../sim/config';
+import { carsOf, cleanMix, mixValue, totalCars, type CarMix } from '../sim/cars';
 import type { Game } from '../sim/game';
 import type { Train } from '../sim/trains';
 import { money } from './format';
@@ -24,29 +18,31 @@ export const atStation = (game: Game, t: Train): boolean => !t.next && game.isSt
 export interface ReplacePreview {
   price: number;
   tradeIn: number;
-  soldPassenger: number;
-  soldFreight: number;
+  /** Cars sold because the new locomotive pulls fewer. */
+  sold: CarMix;
+  soldCount: number;
   resale: number;
   /** New price minus trade-in minus resale; negative means money back. */
   net: number;
 }
 
-/** Mirrors `Game.replaceLocomotive`: passenger cars are kept first, extras are sold at the resale rate. */
+/** Mirrors `Game.replaceLocomotive`: cars are kept in `CAR_KEEP_ORDER`, extras are sold at the resale rate. */
 export function replacePreview(game: Game, t: Train, model: LocoModel): ReplacePreview {
-  const max = LOCO[model].maxCars;
-  const passengerCars = Math.min(t.owned.passengerCars, max);
-  const freightCars = Math.min(t.owned.freightCars, max - passengerCars);
-  const soldPassenger = t.owned.passengerCars - passengerCars;
-  const soldFreight = t.owned.freightCars - freightCars;
-  const resale =
-    Math.round(soldPassenger * PASSENGER_CAR_COST * CAR_RESALE_RATE) +
-    Math.round(soldFreight * FREIGHT_CAR_COST * CAR_RESALE_RATE);
+  let room = LOCO[model].maxCars;
+  const sold: CarMix = {};
+  for (const type of CAR_KEEP_ORDER) {
+    const have = carsOf(t.owned, type);
+    const keep = Math.min(have, room);
+    room -= keep;
+    if (have > keep) sold[type] = have - keep;
+  }
+  const resale = mixValue(sold, CAR_RESALE_RATE);
   const tradeIn = game.tradeInValue(t);
   return {
     price: LOCO[model].price,
     tradeIn,
-    soldPassenger,
-    soldFreight,
+    sold: cleanMix(sold),
+    soldCount: totalCars(sold),
     resale,
     net: LOCO[model].price - tradeIn - resale,
   };
@@ -68,10 +64,5 @@ export function modelCard(model: LocoModel, selected: boolean, extra = ''): stri
 }
 
 /** Mirrors `Game.retireTrain`: trade-in for the locomotive plus resale of every car. */
-export function retireRefund(game: Game, t: Train): number {
-  return (
-    game.tradeInValue(t) +
-    Math.round(t.owned.passengerCars * PASSENGER_CAR_COST * CAR_RESALE_RATE) +
-    Math.round(t.owned.freightCars * FREIGHT_CAR_COST * CAR_RESALE_RATE)
-  );
-}
+export const retireRefund = (game: Game, t: Train): number =>
+  game.tradeInValue(t) + mixValue(t.owned, CAR_RESALE_RATE);

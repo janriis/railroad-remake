@@ -21,7 +21,7 @@ Feature: Locomotive ageing
     And breakdowns never happen
 
   Scenario Outline: Age counts whole years since purchase
-    Given an American train with 0 passenger cars and 0 freight cars exists at the station at (2, 5)
+    Given an American train with 0 coaches and 0 boxcars exists at the station at (2, 5)
     When <days> days pass
     Then the train's age should be <age> years
 
@@ -49,7 +49,7 @@ Feature: Locomotive ageing
   #   age 10: 2,687.83      -> $2,688
   #   age 20: 3,612.22      -> $3,612
   Scenario Outline: Running cost rises 3% a year, compounded and rounded
-    Given an American train with 0 passenger cars and 0 freight cars exists at the station at (2, 5)
+    Given an American train with 0 coaches and 0 boxcars exists at the station at (2, 5)
     And the train is <age> years old
     When 1 months pass
     Then the company should have paid <cost> in train running costs
@@ -93,7 +93,7 @@ Feature: Locomotive ageing
 
   # Train running = locomotive $2,688 (age 10) + 2 cars x $200 = $3,088. The cars cost what they always did.
   Scenario: Cars do not age
-    Given an American train with 2 passenger cars and 0 freight cars exists at the station at (2, 5)
+    Given an American train with 2 coaches and 0 boxcars exists at the station at (2, 5)
     And the train is 10 years old
     When 1 months pass
     Then the company should have paid $3,088 in train running costs

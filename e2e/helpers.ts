@@ -46,7 +46,7 @@ export function fixtureSave(opts: FixtureOpts = {}): SaveData {
   for (const dx of opts.stations ?? []) mustOk(g.buildStation('small', at(dx)), `station ${dx}`);
   for (const t of opts.trains ?? []) {
     // addTrain is the no-cost fixture API; setRoute is the real command.
-    const train = g.addTrain({ at: at(t.at), passengerCars: 2 });
+    const train = g.addTrain({ at: at(t.at), cars: { coach: 2 } });
     if (t.route) mustOk(g.setRoute(train.id, t.route.map(at)), 'route');
   }
   return g.toSave();

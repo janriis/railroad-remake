@@ -4,7 +4,8 @@ Feature: Buying trains
   I want to buy a locomotive and cars
   So that I can haul passengers and freight
 
-  Prices: locomotive $50,000, passenger car $10,000, freight car $8,000. A train holds at most 6 cars.
+  Prices: locomotive $50,000, coach $10,000, boxcar $8,000. A train holds at most as many cars as its locomotive
+  allows (the American 4).
 
   Background:
     Given a new game on a 20x20 map of plains
@@ -19,13 +20,13 @@ Feature: Buying trains
     And the company should own 1 train
 
   Scenario: Buying a locomotive with cars
-    When I buy a locomotive with 2 passenger cars and 1 freight car at the station at (2, 5)
+    When I buy a locomotive with 2 coaches and 1 boxcar at the station at (2, 5)
     Then it cost $78,000
     And the company's cash is $922,000
     And the train should have 3 cars
 
-  Scenario: A train may have at most 6 cars
-    When I buy a locomotive with 7 passenger cars at the station at (2, 5)
+  Scenario: A train may have at most 4 cars
+    When I buy a locomotive with 5 coaches at the station at (2, 5)
     Then the command is rejected with "too many cars"
     And no money was spent
 
@@ -36,11 +37,11 @@ Feature: Buying trains
 
   Scenario: The company cannot afford a train
     Given the company has $55,000 in cash
-    When I buy a locomotive with 1 passenger car at the station at (2, 5)
+    When I buy a locomotive with 1 coach at the station at (2, 5)
     Then the command is rejected with "insufficient funds"
     And the company's cash is $55,000
     And the company should own 0 trains
 
   Scenario: Cars need a locomotive
-    When I buy 2 passenger cars at the station at (2, 5)
+    When I buy 2 coaches at the station at (2, 5)
     Then the command is rejected with "cars need a locomotive"

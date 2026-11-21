@@ -50,9 +50,6 @@ export const STATION: Readonly<Record<StationSize, { cost: number; radius: numbe
 };
 
 export const LOCOMOTIVE_COST = 50_000;
-export const PASSENGER_CAR_COST = 10_000;
-export const FREIGHT_CAR_COST = 8_000;
-export const MAX_CARS = 6;
 /** Share of a car's price paid back when it is taken off a train. */
 export const CAR_RESALE_RATE = 0.5;
 
@@ -88,22 +85,18 @@ export const CARGO_TYPES = [
 ] as const;
 export type Cargo = (typeof CARGO_TYPES)[number];
 
-/** Payment per unit per tile, and which kind of car carries it. */
-export const CARGO: Readonly<Record<Cargo, { rate: number; car: 'passenger' | 'freight' }>> = {
-  passengers: { rate: 5, car: 'passenger' },
-  mail: { rate: 8, car: 'passenger' },
-  timber: { rate: 3, car: 'freight' },
-  lumber: { rate: 6, car: 'freight' },
-  furniture: { rate: 12, car: 'freight' },
-  grain: { rate: 3, car: 'freight' },
-  flour: { rate: 5, car: 'freight' },
-  loaves: { rate: 9, car: 'freight' },
-  coal: { rate: 4, car: 'freight' },
+/** Payment per unit per tile (which cars carry each cargo: see CAR). */
+export const CARGO: Readonly<Record<Cargo, { rate: number }>> = {
+  passengers: { rate: 5 },
+  mail: { rate: 8 },
+  timber: { rate: 3 },
+  lumber: { rate: 6 },
+  furniture: { rate: 12 },
+  grain: { rate: 3 },
+  flour: { rate: 5 },
+  loaves: { rate: 9 },
+  coal: { rate: 4 },
 };
-
-/** Units one car holds (passengers and mail share passenger cars). */
-export const PASSENGER_CAR_CAPACITY = 40;
-export const FREIGHT_CAR_CAPACITY = 20;
 
 /** Full pay up to this many days in transit, then the time factor drops. */
 export const TRANSIT_GRACE_DAYS = 20;
@@ -345,3 +338,117 @@ export const REPAIR_RATE = 0.05;
 export const OVERHAUL_RATE = 0.3;
 export const TRADE_IN_NEW_RATE = 0.5;
 export const TRADE_IN_WORN_RATE = 0.1;
+
+// --- M7: rolling stock ------------------------------------------------------------------
+
+export const CAR_TYPES = [
+  'coach',
+  'baggage',
+  'boxcar',
+  'hopper',
+  'covered-hopper',
+  'flatcar',
+  'legacy-freight',
+] as const;
+export type CarType = (typeof CAR_TYPES)[number];
+
+/** Real North American car types. A legacy freight car comes only from older saves and cannot be bought. */
+export const CAR: Readonly<
+  Record<
+    CarType,
+    {
+      name: string;
+      plural: string;
+      carries: readonly Cargo[];
+      capacity: number;
+      price: number;
+      from: number;
+      buyable: boolean;
+    }
+  >
+> = {
+  coach: {
+    name: 'coach',
+    plural: 'coaches',
+    carries: ['passengers'],
+    capacity: 40,
+    price: 10_000,
+    from: 1850,
+    buyable: true,
+  },
+  baggage: {
+    name: 'mail & baggage car',
+    plural: 'mail & baggage cars',
+    carries: ['mail'],
+    capacity: 30,
+    price: 10_000,
+    from: 1850,
+    buyable: true,
+  },
+  boxcar: {
+    name: 'boxcar',
+    plural: 'boxcars',
+    carries: ['flour', 'loaves', 'furniture', 'grain'],
+    capacity: 20,
+    price: 8_000,
+    from: 1850,
+    buyable: true,
+  },
+  hopper: {
+    name: 'coal hopper',
+    plural: 'coal hoppers',
+    carries: ['coal'],
+    capacity: 25,
+    price: 8_000,
+    from: 1850,
+    buyable: true,
+  },
+  'covered-hopper': {
+    name: 'covered hopper',
+    plural: 'covered hoppers',
+    carries: ['grain'],
+    capacity: 35,
+    price: 12_000,
+    from: 1930,
+    buyable: true,
+  },
+  flatcar: {
+    name: 'flatcar',
+    plural: 'flatcars',
+    carries: ['timber', 'lumber'],
+    capacity: 20,
+    price: 7_000,
+    from: 1850,
+    buyable: true,
+  },
+  'legacy-freight': {
+    name: 'freight car',
+    plural: 'freight cars',
+    carries: ['timber', 'lumber', 'furniture', 'grain', 'flour', 'loaves', 'coal'],
+    capacity: 20,
+    price: 8_000,
+    from: 1850,
+    buyable: false,
+  },
+};
+
+/** When several coupled types can carry the same goods, they fill in this order (specialised first). */
+export const CAR_FILL_ORDER: readonly CarType[] = [
+  'coach',
+  'baggage',
+  'hopper',
+  'covered-hopper',
+  'flatcar',
+  'boxcar',
+  'legacy-freight',
+];
+/** A replacement locomotive that pulls fewer cars keeps them in this order; the rest are sold. */
+export const CAR_KEEP_ORDER: readonly CarType[] = [
+  'coach',
+  'baggage',
+  'boxcar',
+  'hopper',
+  'covered-hopper',
+  'flatcar',
+  'legacy-freight',
+];

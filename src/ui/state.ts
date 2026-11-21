@@ -2,7 +2,8 @@ import type { Industry } from '../sim/cargo';
 import type { Game, Station } from '../sim/game';
 import type { TrackPlan } from '../sim/planner';
 import type { Segment } from '../sim/track';
-import type { CarCounts, Train } from '../sim/trains';
+import type { CarMix } from '../sim/cars';
+import type { Train } from '../sim/trains';
 import type { Coord } from '../sim/types';
 import type { LocoModel } from '../sim/config';
 import { MONTHS, SAVE_KEY } from './constants';
@@ -33,15 +34,14 @@ export interface TrackState {
 export interface BuyState {
   at: Coord;
   model: LocoModel;
-  passengerCars: number;
-  freightCars: number;
+  cars: CarMix;
 }
 
 export interface RouteState {
   trainId: number;
   stops: Coord[];
   /** Per stop: the car split to leave with, or null to keep the cars. */
-  orders: (CarCounts | null)[];
+  orders: (CarMix | null)[];
   /** True while tapping stations on the map; false while editing the list. */
   picking: boolean;
   /** List editor: index the station picker will insert at (stops.length = append), or null when closed. */
@@ -70,8 +70,7 @@ export interface Floater {
 
 export interface CarsState {
   trainId: number;
-  passengerCars: number;
-  freightCars: number;
+  cars: CarMix;
 }
 
 /** Pointer-based drag reorder of stop rows. Live transforms only; commit on drop. */
