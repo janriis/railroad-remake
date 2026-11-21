@@ -58,6 +58,18 @@
           <b>Train:</b> tap a station to buy a train, then tap its stops in order and press Done. Tap a train
           with the Pan tool to see how it is doing.
         </li>
+        <li>
+          <b>Double:</b> tap two tiles on existing track to add a second line between them, so trains can pass
+          each other. Trains wait at stations, double-track tiles and junctions rather than entering single
+          track with an opposing train on it.
+        </li>
+        <li>
+          <b>Send to…:</b> in the train list or on a train, send it to any station once. It then returns to
+          its route.
+        </li>
+        <li>
+          <b>Cargo:</b> tap a station or an industry to see what waits there. Tap the cash box for the ledger.
+        </li>
       </ul>
       <button id="help-close" class="btn primary" type="button">Got it</button>
     </section>
@@ -115,6 +127,14 @@
             <path d="M2 8h20v2h-2v8h-2v-8h-3v8h-2v-8h-2v8h-2v-8H9v8H7v-8H4v8H2zM2 19h20v2H2z" />
           </svg>
           <span>Bridge</span>
+        </button>
+        <button class="tool" data-tool="double" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M3 3h2v18H3zM8 3h2v18H8zM14 3h2v18h-2zM19 3h2v18h-2zM3 7h7v2H3zM3 15h7v2H3zM14 7h7v2h-7zM14 15h7v2h-7z"
+            />
+          </svg>
+          <span>Double</span>
         </button>
         <button class="tool" data-tool="demolish" type="button">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 14H7zM9 3h6l1 2h4v2H4V5h4z" /></svg>

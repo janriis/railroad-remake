@@ -871,3 +871,104 @@ button:focus-visible {
     transition: none;
   }
 }
+
+/* Double track, trips, economy, ledger */
+.cash-box {
+  cursor: pointer;
+}
+.cash-box.negative {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--danger-text);
+}
+.cash-box.negative .label {
+  color: var(--danger-text);
+}
+.row-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  width: 112px;
+}
+.train-item {
+  flex-wrap: wrap;
+}
+.train-row .load {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.train-row .load:empty {
+  display: none;
+}
+.trip-line {
+  box-sizing: border-box;
+  flex: 1 0 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px 8px 17px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.trip-line[hidden] {
+  display: none;
+}
+.trip-line .mini {
+  min-height: 40px;
+}
+.status.trip {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.sheet-msg .info {
+  font-size: 14px;
+  margin: 2px 0 4px;
+}
+.sheet-msg ul.plain {
+  margin: 2px 0 0;
+  padding-left: 18px;
+}
+.ledger {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 6px;
+}
+.ledger th,
+.ledger td {
+  padding: 4px 4px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+}
+.ledger th[scope='row'],
+.ledger thead th:first-child {
+  text-align: left;
+  font-weight: 600;
+}
+.ledger td.pos {
+  color: var(--good);
+}
+.ledger td.neg {
+  color: var(--danger);
+}
+.ledger tr.total th,
+.ledger tr.total td {
+  font-weight: 800;
+  border-bottom: 0;
+}
+@media (max-width: 400px) {
+  .tool {
+    font-size: 10px;
+  }
+}
+.cash::after {
+  content: ' ›';
+  color: var(--muted);
+}
+.cash-box.negative .cash::after {
+  color: inherit;
+}

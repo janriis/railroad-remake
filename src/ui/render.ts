@@ -1,3 +1,4 @@
+import type { IndustryKind } from '../sim/config';
 import type { Station } from '../sim/game';
 import type { GameMap } from '../sim/map';
 import { stepUnits } from '../sim/pathfinding';
@@ -160,7 +161,15 @@ export function drawTrack(ctx: CanvasRenderingContext2D, segs: readonly Segment[
     const dx = s.b.x - s.a.x;
     const dy = s.b.y - s.a.y;
     const len = Math.hypot(dx, dy);
-    return { ax: s.a.x + 0.5, ay: s.a.y + 0.5, ux: dx / len, uy: dy / len, len, bridge: s.bridge };
+    return {
+      ax: s.a.x + 0.5,
+      ay: s.a.y + 0.5,
+      ux: dx / len,
+      uy: dy / len,
+      len,
+      bridge: s.bridge,
+      dbl: s.double,
+    };
   });
   type G = (typeof geo)[number];
   const line = (g: G, off: number, from = 0, to = g.len) => {
@@ -183,8 +192,11 @@ export function drawTrack(ctx: CanvasRenderingContext2D, segs: readonly Segment[
   // Gravel bed.
   ctx.lineCap = 'round';
   ctx.strokeStyle = 'rgba(92,76,60,0.85)';
-  ctx.lineWidth = 0.32;
-  for (const g of geo) if (!g.bridge) line(g, 0);
+  for (const g of geo) {
+    if (g.bridge) continue;
+    ctx.lineWidth = g.dbl ? 0.58 : 0.32;
+    line(g, 0);
+  }
 
   // Bridges: piers, wooden deck, planks and side beams.
   ctx.lineCap = 'butt';
@@ -204,16 +216,17 @@ export function drawTrack(ctx: CanvasRenderingContext2D, segs: readonly Segment[
       ctx.lineTo(ex - nx * 1.5, ey - ny * 1.5);
       ctx.stroke();
     }
+    const hw = g.dbl ? 0.38 : 0.26;
     ctx.strokeStyle = '#b07d36';
-    ctx.lineWidth = 0.52;
+    ctx.lineWidth = hw * 2;
     line(g, 0, -0.02, g.len + 0.02);
     ctx.strokeStyle = 'rgba(70,42,12,0.55)';
     ctx.lineWidth = 0.025;
-    for (let t = 0.0625; t < g.len; t += 0.125) cross(g, t, 0.26);
+    for (let t = 0.0625; t < g.len; t += 0.125) cross(g, t, hw);
     ctx.strokeStyle = '#4e3216';
     ctx.lineWidth = 0.06;
-    line(g, 0.27);
-    line(g, -0.27);
+    line(g, hw + 0.01);
+    line(g, -hw - 0.01);
   }
 
   // Sleepers.
@@ -223,7 +236,7 @@ export function drawTrack(ctx: CanvasRenderingContext2D, segs: readonly Segment[
     if (g.bridge) continue;
     const n = Math.max(1, Math.round(g.len / 0.2));
     const step = g.len / n;
-    for (let i = 0; i < n; i++) cross(g, (i + 0.5) * step, 0.16);
+    for (let i = 0; i < n; i++) cross(g, (i + 0.5) * step, g.dbl ? 0.3 : 0.16);
   }
 
   // Rails.
@@ -231,8 +244,15 @@ export function drawTrack(ctx: CanvasRenderingContext2D, segs: readonly Segment[
   ctx.lineWidth = 0.04;
   ctx.strokeStyle = '#d8dce0';
   for (const g of geo) {
-    line(g, 0.075);
-    line(g, -0.075);
+    if (g.dbl) {
+      for (const c of [-0.16, 0.16]) {
+        line(g, c + 0.07);
+        line(g, c - 0.07);
+      }
+    } else {
+      line(g, 0.075);
+      line(g, -0.075);
+    }
   }
 }
 
@@ -261,6 +281,115 @@ export function drawTownBuildings(ctx: CanvasRenderingContext2D, town: Coord): v
     ctx.fillRect(x + cx, y + cy, w, h);
     ctx.fillStyle = ROOFS[k]!;
     ctx.fillRect(x + cx, y + cy, w, h * 0.45);
+  }
+}
+
+const INDUSTRY_COLOURS: Record<IndustryKind, string> = {
+  'timber-camp': '#6b4a2b',
+  sawmill: '#a7743a',
+  'furniture-works': '#8a4f7d',
+  'grain-farm': '#d9b43c',
+  'flour-mill': '#e8e2d2',
+  bakery: '#c9763a',
+};
+
+export const INDUSTRY_LABELS: Record<IndustryKind, string> = {
+  'timber-camp': 'Timber camp',
+  sawmill: 'Sawmill',
+  'furniture-works': 'Furniture works',
+  'grain-farm': 'Grain farm',
+  'flour-mill': 'Flour mill',
+  bakery: 'Bakery',
+};
+
+/** Draws a simple glyph for an industry on its tile (tile units). */
+export function drawIndustry(ctx: CanvasRenderingContext2D, kind: IndustryKind, at: Coord): void {
+  const { x, y } = at;
+  const col = INDUSTRY_COLOURS[kind];
+  ctx.fillStyle = 'rgba(40,30,20,0.3)';
+  ctx.fillRect(x + 0.06, y + 0.1, 0.9, 0.88);
+  ctx.lineWidth = 0.035;
+  ctx.strokeStyle = '#2f2820';
+  const body = (bx: number, by: number, w: number, h: number, fill: string) => {
+    ctx.fillStyle = fill;
+    ctx.fillRect(x + bx, y + by, w, h);
+    ctx.strokeRect(x + bx, y + by, w, h);
+  };
+  const tri = (x1: number, y1: number, x2: number, y2: number, x3: number, y3: number, fill: string) => {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(x + x1, y + y1);
+    ctx.lineTo(x + x2, y + y2);
+    ctx.lineTo(x + x3, y + y3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  };
+  switch (kind) {
+    case 'timber-camp': // log pile and a hut
+      for (let i = 0; i < 3; i++) {
+        ctx.fillStyle = i % 2 ? '#8b633a' : col;
+        ctx.beginPath();
+        ctx.arc(x + 0.25 + i * 0.16, y + 0.72, 0.09, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+      body(0.12, 0.2, 0.4, 0.28, '#9a6b3c');
+      tri(0.08, 0.2, 0.32, 0.06, 0.56, 0.2, '#4e3216');
+      tri(0.66, 0.5, 0.78, 0.15, 0.9, 0.5, '#2f6b3a');
+      break;
+    case 'sawmill': // shed with saw blade
+      body(0.12, 0.3, 0.6, 0.5, col);
+      tri(0.08, 0.3, 0.42, 0.1, 0.76, 0.3, '#5a3a1a');
+      ctx.fillStyle = '#d8dce0';
+      ctx.beginPath();
+      ctx.arc(x + 0.82, y + 0.68, 0.12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      break;
+    case 'furniture-works': // factory with chimney
+      body(0.14, 0.34, 0.66, 0.46, col);
+      body(0.64, 0.1, 0.12, 0.26, '#5b4a54');
+      ctx.fillStyle = '#f4efe3';
+      for (let i = 0; i < 3; i++) ctx.fillRect(x + 0.22 + i * 0.2, y + 0.5, 0.1, 0.12);
+      break;
+    case 'grain-farm': // field rows and barn
+      ctx.fillStyle = col;
+      ctx.fillRect(x + 0.08, y + 0.5, 0.84, 0.42);
+      ctx.strokeStyle = '#8a6a1a';
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(x + 0.08, y + 0.58 + i * 0.1);
+        ctx.lineTo(x + 0.92, y + 0.58 + i * 0.1);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = '#2f2820';
+      body(0.2, 0.2, 0.34, 0.26, '#b5483a');
+      tri(0.16, 0.2, 0.37, 0.06, 0.58, 0.2, '#6b2a22');
+      break;
+    case 'flour-mill': // tower with sails
+      body(0.34, 0.3, 0.3, 0.55, col);
+      tri(0.3, 0.3, 0.49, 0.12, 0.68, 0.3, '#7a5a3a');
+      ctx.beginPath();
+      ctx.moveTo(x + 0.49, y + 0.34);
+      ctx.lineTo(x + 0.15, y + 0.06);
+      ctx.moveTo(x + 0.49, y + 0.34);
+      ctx.lineTo(x + 0.83, y + 0.62);
+      ctx.moveTo(x + 0.49, y + 0.34);
+      ctx.lineTo(x + 0.83, y + 0.06);
+      ctx.moveTo(x + 0.49, y + 0.34);
+      ctx.lineTo(x + 0.15, y + 0.62);
+      ctx.stroke();
+      break;
+    case 'bakery': // house with chimney and a loaf
+      body(0.16, 0.36, 0.6, 0.46, col);
+      tri(0.1, 0.36, 0.46, 0.12, 0.82, 0.36, '#7a3b2e');
+      body(0.62, 0.1, 0.1, 0.2, '#5b4a54');
+      ctx.fillStyle = '#f2d28a';
+      ctx.beginPath();
+      ctx.ellipse(x + 0.46, y + 0.62, 0.12, 0.08, 0, 0, Math.PI * 2);
+      ctx.fill();
+      break;
   }
 }
 

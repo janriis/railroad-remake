@@ -1,13 +1,20 @@
 import {
+  CARGO,
+  CARGO_TYPES,
   CAR_RESALE_RATE,
+  FREIGHT_CAR_CAPACITY,
   FREIGHT_CAR_COST,
+  INDUSTRY,
   MAX_CARS,
+  PASSENGER_CAR_CAPACITY,
   PASSENGER_CAR_COST,
   STATION,
   STATION_SIZES,
   TICKS_PER_DAY,
   type StationSize,
 } from '../sim/config';
+import { TOWN_WEIGHT_TOTAL, type Industry } from '../sim/cargo';
+import { emptyLedgerYear, profit, type LedgerYear } from '../sim/economy';
 import { Game, type SaveData, type Station } from '../sim/game';
 import type { TrackPlan } from '../sim/planner';
 import type { CarCounts, Train } from '../sim/trains';
@@ -18,7 +25,9 @@ import {
   TRAIN_COLOURS,
   TS,
   buildTerrainLayer,
+  INDUSTRY_LABELS,
   drawCatchment,
+  drawIndustry,
   drawLabel,
   drawStation,
   drawTownBuildings,
@@ -27,7 +36,7 @@ import {
   trainPoses,
 } from './render';
 
-type Tool = 'pan' | 'track' | 'bridge' | 'demolish' | 'station' | 'train';
+type Tool = 'pan' | 'track' | 'bridge' | 'double' | 'demolish' | 'station' | 'train';
 
 interface Preview {
   path: Coord[];
@@ -66,6 +75,17 @@ interface RouteState {
   error: string | null;
 }
 
+interface SendState {
+  trainId: number;
+}
+
+interface Floater {
+  x: number;
+  y: number;
+  text: string;
+  t0: number;
+}
+
 interface CarsState {
   trainId: number;
   passengerCars: number;
@@ -78,6 +98,7 @@ const TAP_SLOP = 8;
 const TICK_MS = 2000 / TICKS_PER_DAY;
 const ROSTER_KEY = 'railroadsim.roster.collapsed';
 const ROSTER_MS = 250;
+const FLOAT_MS = 1800;
 const CAM_MS = 450;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -113,6 +134,11 @@ function humanError(err: string): string {
     'route needs at least two stops': 'Pick at least two stations.',
     'consecutive stops must differ': 'Two stops in a row cannot be the same station.',
     'stop is not a station': 'Every stop must be a station.',
+    'already double track': 'That stretch is already double track.',
+    'not a station': 'Pick a station.',
+    'the train is already there': 'The train is already at that station.',
+    'the train is not on a trip': 'That train is not on a trip.',
+    'no such train': 'That train no longer exists.',
   };
   if (err.startsWith('no track connects'))
     return 'No track connects these stations. Build track between them first.';
@@ -162,6 +188,10 @@ function start(hotData: unknown): void {
   let carsEdit: CarsState | null = null;
   let selTrainId: number | null = null;
   let selStation: Station | null = null;
+  let selIndustry: Industry | null = null;
+  let sendTo: SendState | null = null;
+  let ledgerOpen = false;
+  const floaters: Floater[] = [];
   let actions: Record<string, () => void> = {};
 
   let paused = false;
@@ -217,6 +247,9 @@ function start(hotData: unknown): void {
     terrain = buildTerrainLayer(game.map);
     refreshSegs();
     alarmed.clear();
+    floaters.length = 0;
+    stopCount.clear();
+    lastIncome = -1;
     acc = 0;
     lastDay = Math.floor(game.time / TICKS_PER_DAY);
     clearSelection();
@@ -257,6 +290,7 @@ function start(hotData: unknown): void {
   const sheetMsg = $('sheet-msg');
   const toast = $('toast');
   let toastTimer = 0;
+  const cashBox = document.querySelector<HTMLElement>('.cash-box')!;
   let lastCash = '';
   let lastDate = '';
 
@@ -269,6 +303,7 @@ function start(hotData: unknown): void {
     if (cash !== lastCash) {
       lastCash = cash;
       $('cash').textContent = cash;
+      cashBox.classList.toggle('negative', game.cash < 0);
     }
     const d = dateText();
     if (d !== lastDate) {
@@ -306,13 +341,35 @@ function start(hotData: unknown): void {
     selTrainId === null ? undefined : game.trains.find((t) => t.id === selTrainId);
 
   function statusText(t: Train): string {
-    if (t.route.length < 2) return 'No route yet';
     if (t.deadlocked) return 'Stuck head-on';
     if (t.status === 'waiting')
       return t.blockedBy === null ? 'Waiting: no way through to the next stop' : 'Waiting for the line ahead';
+    if (t.trip) return `Trip to ${stationNameAt(t.trip)}`;
+    if (t.route.length < 2) return 'No route yet';
     if (t.status === 'at-stop') return 'At station';
     if (t.status === 'moving') return 'Running';
     return t.next ? 'Running' : 'At station';
+  }
+
+  /** Passengers+mail and freight on board against what the cars can hold. */
+  function loadText(t: Train): string {
+    let pax = 0;
+    let freight = 0;
+    for (const l of t.cargo)
+      if (CARGO[l.cargo].car === 'passenger') pax += l.units;
+      else freight += l.units;
+    const parts: string[] = [];
+    if (t.passengerCars) parts.push(`${pax}/${t.passengerCars * PASSENGER_CAR_CAPACITY} passengers+mail`);
+    if (t.freightCars) parts.push(`${freight}/${t.freightCars * FREIGHT_CAR_CAPACITY} freight`);
+    return parts.join(', ');
+  }
+  function cargoBreakdown(t: Train): string {
+    const by = new Map<string, number>();
+    for (const l of t.cargo) by.set(l.cargo, (by.get(l.cargo) ?? 0) + l.units);
+    return [...by]
+      .filter(([, n]) => n > 0)
+      .map(([c, n]) => `${n} ${c}`)
+      .join(', ');
   }
 
   function routeList(stops: Coord[]): string {
@@ -337,6 +394,9 @@ function start(hotData: unknown): void {
     consistSr: HTMLElement;
     chip: HTMLElement;
     route: HTMLElement;
+    load: HTMLElement;
+    trip: HTMLElement;
+    tripText: HTMLElement;
     routeKey: string;
   }
   const rosterRowMap = new Map<number, RosterRow>();
@@ -347,9 +407,10 @@ function start(hotData: unknown): void {
   };
 
   function chipFor(t: Train): { text: string; cls: string } {
-    if (t.route.length < 2) return { text: 'No route', cls: 'none' };
     if (t.deadlocked) return { text: 'Stuck', cls: 'stuck' };
     if (t.status === 'waiting') return { text: 'Waiting', cls: 'waiting' };
+    if (t.trip) return { text: 'On trip', cls: 'trip' };
+    if (t.route.length < 2) return { text: 'No route', cls: 'none' };
     if (t.status === 'at-stop') return { text: 'At station', cls: 'station' };
     if (t.status === 'moving') return { text: 'Running', cls: 'running' };
     return t.next ? { text: 'Running', cls: 'running' } : { text: 'At station', cls: 'station' };
@@ -363,9 +424,16 @@ function start(hotData: unknown): void {
       '<button type="button" class="train-row"><span class="swatch" aria-hidden="true"></span><span class="body">' +
       '<span class="line1"><span class="tname"></span>' +
       `<span class="consist">${LOCO_SVG}<span class="ctext" aria-hidden="true"></span><span class="sr csr"></span></span>` +
-      '<span class="status"></span></span><span class="route"></span></span></button>' +
+      '<span class="status"></span></span><span class="route"></span><span class="load"></span></span></button>' +
       '<span class="row-actions"><button type="button" class="mini txt" data-ract="route">Route</button>' +
-      '<button type="button" class="mini txt" data-ract="cars">Cars</button></span>';
+      '<button type="button" class="mini txt" data-ract="cars">Cars</button>' +
+      '<button type="button" class="mini txt" data-ract="send">Send to…</button></span>';
+    const trip = document.createElement('div');
+    trip.className = 'trip-line';
+    trip.hidden = true;
+    trip.innerHTML =
+      '<span class="trip-text"></span><button type="button" class="mini txt" data-ract="cancel-trip">Cancel trip</button>';
+    el.append(trip);
     const q = (sel: string) => el.querySelector<HTMLElement>(sel)!;
     return {
       el,
@@ -376,12 +444,24 @@ function start(hotData: unknown): void {
       consistSr: q('.csr'),
       chip: q('.status'),
       route: q('.route'),
+      load: q('.load'),
+      trip,
+      tripText: trip.querySelector<HTMLElement>('.trip-text')!,
       routeKey: '\u0000',
     };
   }
 
   function updateRosterRoute(row: RosterRow, t: Train): void {
     const names = t.route.map(stationNameAt);
+    if (t.trip) {
+      // The trip takes the place of the route line while it lasts.
+      const tripKey = `trip:${t.trip.x},${t.trip.y}:${names.join('|')}`;
+      if (tripKey === row.routeKey) return;
+      row.routeKey = tripKey;
+      row.route.removeAttribute('title');
+      row.route.textContent = names.length >= 2 ? `Then back to its route: ${names.join(' → ')} ↺` : '';
+      return;
+    }
     const orders = names.map((_, i) => {
       const o = t.stopOrders[i];
       return o ? carsText(o) : '';
@@ -446,6 +526,9 @@ function start(hotData: unknown): void {
       const cls = `status ${chip.cls}`;
       if (row.chip.className !== cls) row.chip.className = cls;
       updateRosterRoute(row, t);
+      setText(row.load, loadText(t));
+      row.trip.hidden = !t.trip;
+      if (t.trip) setText(row.tripText, `Trip to ${stationNameAt(t.trip)}`);
       row.el.classList.toggle('current', t.id === selTrainId);
       if (t.id === selTrainId) row.main.setAttribute('aria-current', 'true');
       else row.main.removeAttribute('aria-current');
@@ -483,10 +566,15 @@ function start(hotData: unknown): void {
       return;
     }
     const act = (e.target as HTMLElement).closest<HTMLElement>('[data-ract]')?.dataset.ract;
+    if (act === 'cancel-trip') {
+      cancelTripOf(train);
+      return;
+    }
     setTool('pan');
     selTrainId = train.id;
     if (act === 'route') beginRouting(train);
     else if (act === 'cars') beginCars(train);
+    else if (act === 'send') beginSend(train);
     else renderSheet();
     renderRoster();
     panToTrain(train);
@@ -503,6 +591,14 @@ function start(hotData: unknown): void {
       renderCarsSheet();
       return;
     }
+    if (sendTo) {
+      renderSendSheet();
+      return;
+    }
+    if (ledgerOpen) {
+      renderLedger();
+      return;
+    }
     if (buy) {
       renderBuy();
       return;
@@ -511,15 +607,23 @@ function start(hotData: unknown): void {
     if (train) {
       setSheet(
         `<div class="sheet-title">${trainName(train)} <span class="pill${train.deadlocked ? ' bad' : ''}">${statusText(train)}</span></div>` +
-          `<div class="sub">${plural(train.passengerCars, 'passenger car')}, ${plural(train.freightCars, 'freight car')}</div>` +
+          `<div class="sub">${plural(train.passengerCars, 'passenger car')}, ${plural(train.freightCars, 'freight car')}` +
+          (loadText(train) ? ` · ${loadText(train)}` : '') +
+          `</div>` +
+          (cargoBreakdown(train) ? `<div class="sub">Carrying ${cargoBreakdown(train)}</div>` : '') +
+          (train.trip
+            ? `<div>On a trip to <b>${stationNameAt(train.trip)}</b>, then back to its route.</div>`
+            : '') +
           (train.route.length >= 2
             ? `<div>Stops: ${routeList(train.route)}</div>`
             : '<div>This train has no route yet.</div>') +
-          `<div class="btns">${btn('close', 'Close')}${btn('cars', 'Cars')}${btn('route', 'Route', 'primary')}</div>`,
+          `<div class="btns">${btn('close', 'Close')}${btn('cars', 'Cars')}${train.trip ? btn('cancel-trip', 'Cancel trip') : btn('send', 'Send to…')}${btn('route', 'Route', 'primary')}</div>`,
         {
           close: () => clearSelection(),
           cars: () => beginCars(train),
           route: () => beginRouting(train),
+          send: () => beginSend(train),
+          'cancel-trip': () => cancelTripOf(train),
         },
       );
       return;
@@ -529,8 +633,18 @@ function start(hotData: unknown): void {
       setSheet(
         `<div class="sheet-title">${stationName(st)} station</div>` +
           `<div class="sub">${st.size[0]!.toUpperCase() + st.size.slice(1)} station, reaches ${st.radius} tile${st.radius === 1 ? '' : 's'} around it (shown on the map).</div>` +
+          stationInfoHtml(st) +
           `<div class="btns">${btn('close', 'Close')}</div>`,
         { close: () => clearSelection() },
+        true,
+      );
+      return;
+    }
+    if (selIndustry) {
+      setSheet(
+        industryInfoHtml(selIndustry) + `<div class="btns">${btn('close', 'Close')}</div>`,
+        { close: () => clearSelection() },
+        true,
       );
       return;
     }
@@ -544,8 +658,8 @@ function start(hotData: unknown): void {
       setSheet('<b>Train:</b> tap a station to buy a train there', {});
       return;
     }
-    // Bridge and demolish.
-    const name = { bridge: 'Bridge', demolish: 'Demolish' }[tool];
+    // Bridge, double track and demolish.
+    const name = { bridge: 'Bridge', double: 'Double track', demolish: 'Demolish' }[tool];
     const cancel = btn('cancel', 'Cancel');
     if (preview) {
       setSheet(
@@ -554,9 +668,15 @@ function start(hotData: unknown): void {
         { cancel: clearSelection, confirm },
       );
     } else {
-      setSheet(startTile ? `<b>${name}:</b> now tap the end tile` : `<b>${name}:</b> tap the start tile`, {
-        cancel: clearSelection,
-      });
+      const hint =
+        tool === 'double'
+          ? startTile
+            ? 'now tap the end tile on the same line of track'
+            : 'tap a start tile on existing track. Trains can pass each other on double track.'
+          : startTile
+            ? 'now tap the end tile'
+            : 'tap the start tile';
+      setSheet(`<b>${name}:</b> ${hint}`, { cancel: clearSelection });
       if (startTile) sheetMsg.insertAdjacentHTML('beforeend', `<div class="btns">${cancel}</div>`);
     }
   }
@@ -853,6 +973,144 @@ function start(hotData: unknown): void {
     if (drag && e.pointerId === drag.pid) dragEnd(false);
   });
 
+  // ---------- economy info ----------
+  const unit = (n: number): string => n.toLocaleString('en-US');
+
+  function stationInfoHtml(st: Station): string {
+    let h = '';
+    const waiting = CARGO_TYPES.map((c) => [c, game.waitingAt(st, c)] as const).filter(([, n]) => n > 0);
+    h += `<div class="info"><b>Waiting:</b> ${
+      waiting.length ? waiting.map(([c, n]) => `${unit(n)} ${c}`).join(', ') : 'nothing right now'
+    }</div>`;
+    const towns = game.towns
+      .map((t) => [t, game.townCoverage(t).get(st) ?? 0] as const)
+      .filter(([, w]) => w > 0);
+    if (towns.length)
+      h += `<div class="info"><b>Serves:</b> ${towns
+        .map(
+          ([t, w]) =>
+            `${t.name} (${Math.round((w / TOWN_WEIGHT_TOTAL) * 100)}% of the town, pop. ${unit(t.population)})`,
+        )
+        .join(', ')}</div>`;
+    const inds = game.industriesServedBy(st);
+    if (inds.length)
+      h += `<div class="info"><b>Industries:</b><ul class="plain">${inds.map((i) => `<li>${industryLine(i)}</li>`).join('')}</ul></div>`;
+    if (!towns.length && !inds.length)
+      h += '<div class="info sub">No town or industry is within reach of this station.</div>';
+    return h;
+  }
+
+  function industryLine(i: Industry): string {
+    const d = INDUSTRY[i.kind];
+    const flow = d.input ? `takes ${d.input}, makes ${d.output}` : `makes ${d.output}`;
+    return `${INDUSTRY_LABELS[i.kind]}: ${flow}${i.stock > 0 ? ` (${unit(i.stock)} ${d.output} waiting)` : ''}`;
+  }
+
+  function industryInfoHtml(i: Industry): string {
+    const d = INDUSTRY[i.kind];
+    const covering = [...game.stations.values()].filter((s) => game.industriesServedBy(s).includes(i));
+    let h = `<div class="sheet-title">${INDUSTRY_LABELS[i.kind]}</div>`;
+    h += `<div class="info"><b>Makes:</b> ${d.output}${d.input ? ` (${d.in} ${d.input} become ${d.out})` : ` (${d.perMonth} a month)`}</div>`;
+    if (d.input)
+      h += `<div class="info"><b>Takes:</b> ${d.input} (${unit(i.input)} waiting to be processed, ${unit(i.received)} received so far)</div>`;
+    h += `<div class="info"><b>Stock waiting:</b> ${unit(i.stock)} ${d.output}</div>`;
+    h += covering.length
+      ? `<div class="info"><b>Served by:</b> ${covering.map(stationName).join(', ')}</div>`
+      : '<div class="warn">No station reaches this yet. Build a station within reach to move its cargo.</div>';
+    return h;
+  }
+
+  const signed = (n: number): string => (n < 0 ? '−' : n > 0 ? '+' : '') + money(n);
+  function renderLedger(): void {
+    const yr = game.date.year;
+    const cur = game.ledger.get(yr) ?? emptyLedgerYear();
+    const prev = game.ledger.get(yr - 1) ?? emptyLedgerYear();
+    const rows: [string, keyof LedgerYear][] = [
+      ['Cargo income', 'cargoIncome'],
+      ['Construction', 'construction'],
+      ['Rolling stock', 'rollingStock'],
+      ['Track maintenance', 'trackMaintenance'],
+      ['Train running', 'trainRunning'],
+    ];
+    const cell = (n: number): string =>
+      `<td class="${n < 0 ? 'neg' : n > 0 ? 'pos' : ''}">${n === 0 ? '$0' : signed(n)}</td>`;
+    const costs = game.monthlyRunningCosts();
+    setSheet(
+      `<div class="sheet-title">Ledger</div>` +
+        `<table class="ledger"><thead><tr><th></th><th>${yr}</th><th>${yr - 1}</th></tr></thead><tbody>` +
+        rows
+          .map(([label, k]) => `<tr><th scope="row">${label}</th>${cell(cur[k])}${cell(prev[k])}</tr>`)
+          .join('') +
+        `<tr class="total"><th scope="row">Profit / loss</th>${cell(profit(cur))}${cell(profit(prev))}</tr></tbody></table>` +
+        `<div class="sub">Running costs next month-end: ${money(costs.trackMaintenance + costs.trainRunning)} (track ${money(costs.trackMaintenance)}, trains ${money(costs.trainRunning)})</div>` +
+        `<div class="btns">${btn('close', 'Close')}</div>`,
+      { close: () => clearSelection() },
+      true,
+    );
+  }
+  function toggleLedger(): void {
+    const was = ledgerOpen;
+    setTool('pan');
+    if (was) return;
+    ledgerOpen = true;
+    renderSheet();
+  }
+
+  // ---------- send a train to a station ----------
+  function beginSend(train: Train): void {
+    clearSelection();
+    selTrainId = train.id;
+    sendTo = { trainId: train.id };
+    renderSheet();
+    renderRoster();
+    requestDraw();
+  }
+  function renderSendSheet(): void {
+    const train = game.train(sendTo!.trainId);
+    if (!train) return;
+    const acts: Record<string, () => void> = { cancel: clearSelection };
+    let list = '<div class="picker" role="group" aria-label="Choose a station">';
+    [...game.stations.values()].forEach((st, k) => {
+      acts[`go-${k}`] = () => sendToStation(train, st);
+      list += `<button type="button" class="segbtn" data-act="go-${k}">${stationName(st)}</button>`;
+    });
+    list += '</div>';
+    setSheet(
+      `<div class="sheet-title">Send ${trainName(train)} to…</div>` +
+        `<div class="sub">Pick a station below or tap one on the map. It goes there once, then back to its route.</div>` +
+        `<div class="editor-scroll">${list}</div>` +
+        `<div class="btns">${btn('cancel', 'Cancel')}</div>`,
+      acts,
+      true,
+    );
+  }
+  function sendToStation(train: Train, st: Station): void {
+    const r = game.sendTrainTo(train.id, st.at);
+    if (!r.ok) {
+      showToast(humanError(r.error));
+      return;
+    }
+    persist();
+    showToast(`${trainName(train)} is heading to ${stationName(st)}.`);
+    sendTo = null;
+    selTrainId = train.id;
+    renderSheet();
+    renderRoster();
+    requestDraw();
+  }
+  function cancelTripOf(train: Train): void {
+    const r = game.cancelTrip(train.id);
+    if (!r.ok) {
+      showToast(humanError(r.error));
+      return;
+    }
+    persist();
+    showToast(`${trainName(train)} is back on its route.`);
+    renderSheet();
+    renderRoster();
+    requestDraw();
+  }
+
   function beginCars(train: Train): void {
     clearSelection();
     selTrainId = train.id;
@@ -957,10 +1215,29 @@ function start(hotData: unknown): void {
     const short = broke
       ? `<div class="err">Not enough cash: it costs ${money(plan.cost)} and you have ${money(game.cash)}.</div>`
       : '';
+    // Existing single track between the same two tiles can be upgraded to double track.
+    const [pa, pb] = [plan.path[0]!, plan.path[plan.path.length - 1]!];
+    const dq = game.quoteDoubleTrack(pa, pb);
+    const upgrade = (): void => {
+      const r = game.doubleTrack(pa, pb);
+      refreshSegs();
+      updateHud();
+      if (r.ok) persist();
+      showToast(r.ok ? `Doubled the track for ${money(r.cost)}` : humanError(r.error));
+      clearSelection();
+    };
+    const upBtn = dq.ok
+      ? btn('upgrade', `Upgrade to double track — ${money(dq.cost)}`, 'primary', dq.cost > game.cash)
+      : '';
     if (plan.newSegments === 0) {
+      const dbl = !dq.ok && dq.error === 'already double track';
       setSheet(
-        `<div class="big">Already connected</div><div class="sub">There is track along this whole route.</div><div class="btns">${cancel}</div>`,
-        { cancel: clearSelection },
+        `<div class="big">Already connected</div><div class="sub">There is track along this whole route.${dbl ? ' It is already double track.' : ''}</div>` +
+          (dq.ok && dq.cost > game.cash
+            ? `<div class="err">Not enough cash to double it: ${money(dq.cost)}.</div>`
+            : '') +
+          `<div class="btns">${cancel}${upBtn}</div>`,
+        { cancel: clearSelection, upgrade },
       );
       return;
     }
@@ -968,8 +1245,8 @@ function start(hotData: unknown): void {
       const around = tp.view === 'alt' ? 'Going around the water. ' : '';
       setSheet(
         `<div class="big">${money(plan.cost)}</div><div class="sub">${around}${plural(plan.newSegments, 'new segment')}</div>${short}` +
-          `<div class="btns">${cancel}${btn('build', 'Build', 'primary', broke)}</div>`,
-        { cancel: clearSelection, build: () => buildPlan(plan, false) },
+          `<div class="btns">${cancel}${upBtn.replace('primary', '')}${btn('build', 'Build', 'primary', broke)}</div>`,
+        { cancel: clearSelection, upgrade, build: () => buildPlan(plan, false) },
       );
       return;
     }
@@ -1059,6 +1336,9 @@ function start(hotData: unknown): void {
     carsEdit = null;
     selTrainId = null;
     selStation = null;
+    selIndustry = null;
+    sendTo = null;
+    ledgerOpen = false;
     renderSheet();
     renderRoster();
     requestDraw();
@@ -1138,6 +1418,22 @@ function start(hotData: unknown): void {
 
   function computePreview(a: Coord, b: Coord): Preview {
     if (sameCoord(a, b)) return err([a], 'path too short');
+    if (tool === 'double') {
+      const dp = game.doublingPath(a, b);
+      if (typeof dp === 'string') return err([a, b], dp);
+      const q = game.quoteDoubleTrack(a, b);
+      if (!q.ok) return err(dp, q.error);
+      let n = 0;
+      for (let i = 1; i < dp.length; i++) if (!game.track.isDouble(dp[i - 1]!, dp[i]!)) n++;
+      if (q.cost > game.cash)
+        return err(dp, `not enough cash: it costs ${money(q.cost)} and you have ${money(game.cash)}`);
+      return {
+        path: dp,
+        ok: true,
+        html: `<div class="big">${money(q.cost)}</div><div class="sub">Double ${plural(n, 'segment')}: trains can pass each other here</div>`,
+        affected: [],
+      };
+    }
     const path = straightPath(a, b);
     if (!path)
       return err(
@@ -1183,6 +1479,9 @@ function start(hotData: unknown): void {
     if (tool === 'bridge') {
       const r = game.buildBridge(a, b);
       message = r.ok ? `Built a bridge for ${money(r.cost)}` : humanError(r.error);
+    } else if (tool === 'double') {
+      const r = game.doubleTrack(a, b);
+      message = r.ok ? `Doubled the track for ${money(r.cost)}` : humanError(r.error);
     } else {
       const r = game.demolishTrack(a, b);
       message = r.ok ? `Refunded ${money(r.cost)}` : humanError(r.error);
@@ -1232,6 +1531,9 @@ function start(hotData: unknown): void {
     buy = null;
     carsEdit = null;
     selStation = null;
+    selIndustry = null;
+    sendTo = null;
+    ledgerOpen = false;
     selTrainId = train.id;
     routing = {
       trainId: train.id,
@@ -1341,6 +1643,16 @@ function start(hotData: unknown): void {
       requestDraw();
       return;
     }
+    if (sendTo) {
+      const st = stationNear(w.x, w.y);
+      const train = game.train(sendTo.trainId);
+      if (!st || !train) {
+        showToast('Tap a station, or pick one from the list.');
+        return;
+      }
+      sendToStation(train, st);
+      return;
+    }
     if (tool === 'pan') {
       const train = trainNear(w.x, w.y);
       if (train) {
@@ -1350,6 +1662,7 @@ function start(hotData: unknown): void {
         const st = stationNear(w.x, w.y);
         clearSelection();
         selStation = st;
+        if (!st) selIndustry = game.industryAt(t) ?? null;
       }
       renderSheet();
       requestDraw();
@@ -1381,8 +1694,12 @@ function start(hotData: unknown): void {
       requestDraw();
       return;
     }
-    // Track, bridge, demolish: two taps.
+    // Track, bridge, double, demolish: two taps.
     const tile = tool === 'track' ? nearestTown(t) : t;
+    if (tool === 'double' && (!startTile || preview) && !game.track.touches(tile)) {
+      showToast('Double track upgrades existing track. Tap a tile that has track.');
+      return;
+    }
     if (startTile && !preview && !tp && sameCoord(startTile, tile)) {
       clearSelection();
       return;
@@ -1517,7 +1834,7 @@ function start(hotData: unknown): void {
       const moved = Math.hypot(p.x - panFrom.x, p.y - panFrom.y);
       if (tap && tap.id === e.pointerId && moved > TAP_SLOP) tap.ok = false;
       // Touch pans only in the Pan tool (or while picking a route); a mouse can always drag.
-      const canPan = tool === 'pan' || !!routing || e.pointerType === 'mouse';
+      const canPan = tool === 'pan' || !!routing || !!sendTo || e.pointerType === 'mouse';
       if (canPan && (tap?.ok === false || moved > TAP_SLOP)) {
         cam.x = panFrom.cx - (p.x - panFrom.x) / cam.zoom;
         cam.y = panFrom.cy - (p.y - panFrom.y) / cam.zoom;
@@ -1599,6 +1916,7 @@ function start(hotData: unknown): void {
     }
 
     for (const t of game.towns) drawTownBuildings(ctx, t);
+    for (const i of game.industries) drawIndustry(ctx, i.kind, i.at);
     drawTrack(ctx, segs);
     drawRouteLegs(z);
     drawCatchments();
@@ -1608,8 +1926,18 @@ function start(hotData: unknown): void {
 
     // Screen space: labels keep a constant readable size.
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    for (const t of game.towns) drawLabel(ctx, t.name, ox + (t.x + 0.5) * z, oy + t.y * z - 2);
+    for (const t of game.towns)
+      drawLabel(
+        ctx,
+        `${t.name} · ${t.population.toLocaleString('en-US')}`,
+        ox + (t.x + 0.5) * z,
+        oy + t.y * z - 2,
+      );
+    if (z >= 14)
+      for (const i of game.industries)
+        drawLabel(ctx, INDUSTRY_LABELS[i.kind], ox + (i.at.x + 0.5) * z, oy + i.at.y * z - 2);
     drawRouteMarkers(ox, oy, z);
+    drawFloaters(ox, oy, z, now);
   }
 
   // ---------- selected train's route on the map ----------
@@ -1658,12 +1986,43 @@ function start(hotData: unknown): void {
     ctx.restore();
   }
 
+  function drawFloaters(ox: number, oy: number, z: number, now: number): void {
+    for (let i = floaters.length - 1; i >= 0; i--)
+      if (now - floaters[i]!.t0 > FLOAT_MS) floaters.splice(i, 1);
+    if (!floaters.length) return;
+    ctx.font = '800 15px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    for (const f of floaters) {
+      const k = (now - f.t0) / FLOAT_MS;
+      const sx = ox + f.x * z;
+      const sy = oy + f.y * z - (reducedMotion ? 12 : 8 + k * 30);
+      ctx.globalAlpha = 1 - k * k;
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(10,50,20,0.85)';
+      ctx.strokeText(f.text, sx, sy);
+      ctx.fillStyle = '#9af0b2';
+      ctx.fillText(f.text, sx, sy);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   function drawCatchments(): void {
     if (stationTile && tool === 'station') {
       for (const size of [...STATION_SIZES].reverse())
         drawCatchment(ctx, stationTile, STATION[size].radius, size === 'small');
     }
     if (selStation) drawCatchment(ctx, selStation.at, selStation.radius, true);
+    if (selIndustry) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 0.07;
+      ctx.beginPath();
+      tileRect(selIndustry.at, 0.02);
+      ctx.stroke();
+    }
+    const sender = sendTo ? game.train(sendTo.trainId) : undefined;
+    if (sender) for (const s of game.stations.values()) drawCatchment(ctx, s.at, 0, false);
   }
 
   function drawTrains(now: number, z: number): void {
@@ -1827,26 +2186,54 @@ function start(hotData: unknown): void {
   let lastFrame = performance.now();
   let lastTrainKey = '';
 
+  const stopCount = new Map<number, number>();
+  let lastIncome = -1;
+  let lastIncomeYear = 0;
+  function trackIncome(): void {
+    const year = game.date.year;
+    const income = game.ledger.get(year)?.cargoIncome ?? 0;
+    const arrived: Train[] = [];
+    for (const t of game.trains) {
+      const seen = stopCount.get(t.id);
+      if (seen !== undefined && t.journeys > seen && t.lastStop) arrived.push(t);
+      stopCount.set(t.id, t.journeys);
+    }
+    if (lastIncome >= 0 && year === lastIncomeYear && income > lastIncome && arrived.length) {
+      const share = Math.round((income - lastIncome) / arrived.length);
+      const now = performance.now();
+      for (const t of arrived)
+        floaters.push({ x: t.lastStop!.x + 0.5, y: t.lastStop!.y, text: `+${money(share)}`, t0: now });
+    }
+    lastIncome = income;
+    lastIncomeYear = year;
+  }
+
   function afterTicks(): void {
     updateHud();
+    trackIncome();
     const day = Math.floor(game.time / TICKS_PER_DAY);
     if (day !== lastDay) {
       lastDay = day;
       persist();
+      if ((selStation || selIndustry || ledgerOpen) && !routing && !carsEdit && !sendTo && !buy)
+        renderSheet();
     }
     // Deadlock alarm: once per incident.
     const stuck = game.trains.filter((t) => t.deadlocked);
     if (stuck.length === 0) alarmed.clear();
     else if (stuck.some((t) => !alarmed.has(t.id))) {
       if (alarmed.size === 0)
-        showToast('Two trains are stuck head-on. Add a passing loop or a station between them.', 7000);
+        showToast(
+          'Two trains are stuck head-on. Use the Double tool on that stretch so they can pass.',
+          7000,
+        );
       for (const t of stuck) alarmed.add(t.id);
     }
     const sel = selectedTrain();
-    const key = sel ? `${sel.id}|${statusText(sel)}` : '';
+    const key = sel ? `${sel.id}|${statusText(sel)}|${loadText(sel)}` : '';
     if (key !== lastTrainKey) {
       lastTrainKey = key;
-      if (sel && !routing && !carsEdit) renderSheet();
+      if (sel && !routing && !carsEdit && !sendTo) renderSheet();
     }
   }
 
@@ -1867,6 +2254,7 @@ function start(hotData: unknown): void {
       if (ticked > 0) afterTicks();
       if (ticked > 0 || game.trains.length > 0) draw(now);
     }
+    if (paused && floaters.length) draw(now);
   }
 
   function setPaused(p: boolean): void {
@@ -1886,6 +2274,18 @@ function start(hotData: unknown): void {
   // ---------- wiring ----------
   for (const b of document.querySelectorAll<HTMLButtonElement>('.tool'))
     b.addEventListener('click', () => setTool(b.dataset.tool as Tool));
+
+  // Tapping the cash box opens the ledger.
+  cashBox.setAttribute('role', 'button');
+  cashBox.setAttribute('tabindex', '0');
+  cashBox.setAttribute('aria-label', 'Cash. Open the ledger');
+  cashBox.addEventListener('click', toggleLedger);
+  cashBox.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggleLedger();
+    }
+  });
   $('play').addEventListener('click', () => setPaused(!paused));
   for (const b of document.querySelectorAll<HTMLButtonElement>('.speed'))
     b.addEventListener('click', () => {
