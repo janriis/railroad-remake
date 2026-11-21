@@ -533,28 +533,57 @@ button:focus-visible {
 .roster-empty[hidden] {
   display: none;
 }
+.train-item {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+.train-item:last-child {
+  border-bottom: 0;
+}
+.train-item.current {
+  background: var(--surface-2);
+}
 .train-row {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: stretch;
   gap: 10px;
-  width: 100%;
   min-height: 56px;
   box-sizing: border-box;
-  padding: 8px 12px 8px 0;
+  padding: 8px 6px 8px 0;
   border: 0;
-  border-bottom: 1px solid var(--border);
   background: transparent;
   text-align: left;
   cursor: pointer;
 }
-.train-row:last-child {
-  border-bottom: 0;
-}
 .train-row:focus-visible {
   outline-offset: -3px;
 }
-.train-row[aria-current='true'] {
+.row-actions {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding-right: 8px;
+}
+.mini {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
   background: var(--surface-2);
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}
+.mini.txt {
+  font-size: 13px;
+  padding: 0 8px;
+}
+.mini:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .train-row .swatch {
   flex: none;
@@ -678,4 +707,71 @@ button:focus-visible {
   #sheet:not(.hidden) ~ #roster {
     display: none;
   }
+}
+
+/* Route and cars editors */
+.sheet.tall {
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+  min-height: 0;
+}
+.sheet.tall .sheet-msg {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.editor-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  margin-bottom: 8px;
+}
+.stoprow {
+  border-bottom: 1px solid var(--border);
+  padding: 6px 0 8px;
+}
+.stoptop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.minis {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+.seg {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0;
+}
+.segbtn {
+  flex: 1;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.segbtn.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.addstop {
+  width: 100%;
+  margin-top: 8px;
+}
+.sheet-msg .warn {
+  color: var(--warn);
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 6px;
 }

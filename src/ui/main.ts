@@ -1,7 +1,16 @@
-import { MAX_CARS, STATION, STATION_SIZES, TICKS_PER_DAY, type StationSize } from '../sim/config';
+import {
+  CAR_RESALE_RATE,
+  FREIGHT_CAR_COST,
+  MAX_CARS,
+  PASSENGER_CAR_COST,
+  STATION,
+  STATION_SIZES,
+  TICKS_PER_DAY,
+  type StationSize,
+} from '../sim/config';
 import { Game, type SaveData, type Station } from '../sim/game';
 import type { TrackPlan } from '../sim/planner';
-import type { Train } from '../sim/trains';
+import type { CarCounts, Train } from '../sim/trains';
 import { straightPath, type Segment } from '../sim/track';
 import { findTrackPath } from '../sim/pathfinding';
 import { sameCoord, type Coord } from '../sim/types';
@@ -48,7 +57,17 @@ interface BuyState {
 interface RouteState {
   trainId: number;
   stops: Coord[];
+  /** Per stop: the car split to leave with, or null to keep the cars. */
+  orders: (CarCounts | null)[];
+  /** True while tapping stations on the map; false while editing the list. */
+  picking: boolean;
   error: string | null;
+}
+
+interface CarsState {
+  trainId: number;
+  passengerCars: number;
+  freightCars: number;
 }
 
 const MAP_SIZE = 64;
@@ -136,6 +155,7 @@ function start(hotData: unknown): void {
   let stationTile: Coord | null = null;
   let buy: BuyState | null = null;
   let routing: RouteState | null = null;
+  let carsEdit: CarsState | null = null;
   let selTrainId: number | null = null;
   let selStation: Station | null = null;
   let actions: Record<string, () => void> = {};
@@ -265,10 +285,14 @@ function start(hotData: unknown): void {
   const btn = (act: string, label: string, kind = '', disabled = false): string =>
     `<button type="button" class="btn ${kind}" data-act="${act}"${disabled ? ' disabled' : ''}>${label}</button>`;
 
-  function setSheet(html: string, acts: Record<string, () => void>): void {
+  function setSheet(html: string, acts: Record<string, () => void>, tall = false): void {
+    const keep = sheetMsg.querySelector('.editor-scroll')?.scrollTop ?? 0;
     sheet.classList.remove('hidden');
+    sheet.classList.toggle('tall', tall);
     sheetMsg.innerHTML = html;
     actions = acts;
+    const sc = sheetMsg.querySelector('.editor-scroll');
+    if (sc && tall) sc.scrollTop = keep;
   }
   sheet.addEventListener('click', (e) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
@@ -303,7 +327,8 @@ function start(hotData: unknown): void {
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a2 2 0 012 2v10a3 3 0 01-3 3l2 3h-2.5l-2-3h-5l-2 3H5l2-3a3 3 0 01-3-3V5a2 2 0 012-2zm0 3v5h12V6zm2 8a1.3 1.3 0 100 2.6A1.3 1.3 0 008 14zm8 0a1.3 1.3 0 100 2.6 1.3 1.3 0 000-2.6z" /></svg>';
 
   interface RosterRow {
-    el: HTMLButtonElement;
+    el: HTMLElement;
+    main: HTMLButtonElement;
     swatch: HTMLElement;
     name: HTMLElement;
     consistText: HTMLElement;
@@ -329,18 +354,20 @@ function start(hotData: unknown): void {
   }
 
   function makeRosterRow(id: number): RosterRow {
-    const el = document.createElement('button');
-    el.type = 'button';
-    el.className = 'train-row';
+    const el = document.createElement('div');
+    el.className = 'train-item';
     el.dataset.train = String(id);
     el.innerHTML =
-      '<span class="swatch" aria-hidden="true"></span><span class="body">' +
+      '<button type="button" class="train-row"><span class="swatch" aria-hidden="true"></span><span class="body">' +
       '<span class="line1"><span class="tname"></span>' +
       `<span class="consist">${LOCO_SVG}<span class="ctext" aria-hidden="true"></span><span class="sr csr"></span></span>` +
-      '<span class="status"></span></span><span class="route"></span></span>';
+      '<span class="status"></span></span><span class="route"></span></span></button>' +
+      '<span class="row-actions"><button type="button" class="mini txt" data-ract="route">Route</button>' +
+      '<button type="button" class="mini txt" data-ract="cars">Cars</button></span>';
     const q = (sel: string) => el.querySelector<HTMLElement>(sel)!;
     return {
       el,
+      main: q('.train-row') as HTMLButtonElement,
       swatch: q('.swatch'),
       name: q('.tname'),
       consistText: q('.ctext'),
@@ -353,7 +380,11 @@ function start(hotData: unknown): void {
 
   function updateRosterRoute(row: RosterRow, t: Train): void {
     const names = t.route.map(stationNameAt);
-    const key = `${names.join('|')}#${t.target}`;
+    const orders = names.map((_, i) => {
+      const o = t.stopOrders[i];
+      return o ? carsText(o) : '';
+    });
+    const key = `${names.join('|')}#${t.target}#${orders.join('|')}`;
     if (key === row.routeKey) return;
     row.routeKey = key;
     row.route.replaceChildren();
@@ -362,12 +393,14 @@ function start(hotData: unknown): void {
       row.route.removeAttribute('title');
       return;
     }
-    row.route.title = names.join(' → ') + ', then repeats';
+    row.route.title =
+      names.map((n, i) => n + (orders[i] ? ` (${orders[i]})` : '')).join(' → ') + ', then repeats';
     names.forEach((n, i) => {
       if (i > 0) row.route.append(' → ');
       const span = document.createElement('span');
       span.className = i === t.target ? 'stop next' : 'stop';
-      span.textContent = i === t.target ? `▸ ${n}` : n;
+      const tag = orders[i] ? ` (${orders[i]})` : '';
+      span.textContent = (i === t.target ? `▸ ${n}` : n) + tag;
       row.route.append(span);
     });
     const loop = document.createElement('span');
@@ -411,8 +444,9 @@ function start(hotData: unknown): void {
       const cls = `status ${chip.cls}`;
       if (row.chip.className !== cls) row.chip.className = cls;
       updateRosterRoute(row, t);
-      if (t.id === selTrainId) row.el.setAttribute('aria-current', 'true');
-      else row.el.removeAttribute('aria-current');
+      row.el.classList.toggle('current', t.id === selTrainId);
+      if (t.id === selTrainId) row.main.setAttribute('aria-current', 'true');
+      else row.main.removeAttribute('aria-current');
     });
   }
 
@@ -443,12 +477,15 @@ function start(hotData: unknown): void {
     const train = game.train(Number(el.dataset.train));
     if (!train) return;
     if (routing) {
-      showToast('Finish picking the route first.');
+      showToast('Finish the route first (Save or Cancel).');
       return;
     }
+    const act = (e.target as HTMLElement).closest<HTMLElement>('[data-ract]')?.dataset.ract;
     setTool('pan');
     selTrainId = train.id;
-    renderSheet();
+    if (act === 'route') beginRouting(train);
+    else if (act === 'cars') beginCars(train);
+    else renderSheet();
     renderRoster();
     panToTrain(train);
     requestDraw();
@@ -456,18 +493,12 @@ function start(hotData: unknown): void {
 
   function renderSheet(): void {
     if (routing) {
-      const train = game.train(routing.trainId);
-      const n = routing.stops.length;
-      setSheet(
-        `<div class="sheet-title">Route for ${train ? trainName(train) : 'train'}</div>` +
-          (n
-            ? `<div>${routeList(routing.stops)}</div>`
-            : '<div>Tap stations on the map in the order the train should visit them.</div>') +
-          `<div class="sub">${n < 2 ? 'Pick at least two stations.' : 'The train will loop through these stops.'}</div>` +
-          (routing.error ? `<div class="err">${humanError(routing.error)}</div>` : '') +
-          `<div class="btns">${btn('cancel', 'Cancel')}${btn('undo', 'Undo last', '', n === 0)}${btn('done', 'Done', 'primary', n < 2)}</div>`,
-        { cancel: cancelRouting, undo: undoStop, done: finishRouting },
-      );
+      if (routing.picking) renderPicking();
+      else renderRouteEditor();
+      return;
+    }
+    if (carsEdit) {
+      renderCarsSheet();
       return;
     }
     if (buy) {
@@ -482,9 +513,10 @@ function start(hotData: unknown): void {
           (train.route.length >= 2
             ? `<div>Stops: ${routeList(train.route)}</div>`
             : '<div>This train has no route yet.</div>') +
-          `<div class="btns">${btn('close', 'Close')}${btn('route', 'Change route', 'primary')}</div>`,
+          `<div class="btns">${btn('close', 'Close')}${btn('cars', 'Cars')}${btn('route', 'Route', 'primary')}</div>`,
         {
           close: () => clearSelection(),
+          cars: () => beginCars(train),
           route: () => beginRouting(train),
         },
       );
@@ -525,6 +557,200 @@ function start(hotData: unknown): void {
       });
       if (startTile) sheetMsg.insertAdjacentHTML('beforeend', `<div class="btns">${cancel}</div>`);
     }
+  }
+
+  const carsText = (o: CarCounts): string =>
+    [o.passengerCars ? `${o.passengerCars}P` : '', o.freightCars ? `${o.freightCars}F` : '']
+      .filter(Boolean)
+      .join(' ') || 'no cars';
+
+  function renderPicking(): void {
+    const r = routing!;
+    const train = game.train(r.trainId);
+    const n = r.stops.length;
+    setSheet(
+      `<div class="sheet-title">Add stops for ${train ? trainName(train) : 'train'}</div>` +
+        (n
+          ? `<div>${routeList(r.stops)}</div>`
+          : '<div>Tap stations on the map in the order the train should visit them.</div>') +
+        `<div class="sub">${n < 2 ? 'Pick at least two stations.' : 'Tap more stations, or press Done to review the route.'}</div>` +
+        `<div class="btns">${btn('cancel', 'Cancel')}${btn('undo', 'Undo last', '', n === 0)}${btn('done', 'Done', 'primary', n < 2)}</div>`,
+      { cancel: cancelRouting, undo: undoStop, done: finishPicking },
+    );
+  }
+
+  function renderRouteEditor(): void {
+    const r = routing!;
+    const train = game.train(r.trainId);
+    if (!train) return;
+    const owned = train.passengerCars + train.freightCars;
+    const n = r.stops.length;
+    const acts: Record<string, () => void> = {
+      cancel: cancelRouting,
+      add: () => {
+        r.picking = true;
+        r.error = null;
+        renderSheet();
+        requestDraw();
+      },
+      save: saveRoute,
+    };
+    const edit = (fn: () => void) => () => {
+      fn();
+      r.error = null;
+      renderSheet();
+      renderRoster();
+      requestDraw();
+    };
+    const swap = (i: number, j: number) => {
+      [r.stops[i], r.stops[j]] = [r.stops[j]!, r.stops[i]!];
+      [r.orders[i], r.orders[j]] = [r.orders[j] ?? null, r.orders[i] ?? null];
+    };
+    const small = (act: string, label: string, aria: string, disabled = false) =>
+      `<button type="button" class="mini" data-act="${act}" aria-label="${aria}"${disabled ? ' disabled' : ''}>${label}</button>`;
+    let list = '';
+    r.stops.forEach((c, i) => {
+      const name = stationNameAt(c);
+      const o = r.orders[i] ?? null;
+      acts[`up-${i}`] = edit(() => swap(i, i - 1));
+      acts[`down-${i}`] = edit(() => swap(i, i + 1));
+      acts[`rm-${i}`] = edit(() => {
+        r.stops.splice(i, 1);
+        r.orders.splice(i, 1);
+      });
+      acts[`keep-${i}`] = edit(() => {
+        r.orders[i] = null;
+      });
+      acts[`split-${i}`] = edit(() => {
+        r.orders[i] = { passengerCars: train.passengerCars, freightCars: train.freightCars };
+      });
+      const setP = (p: number) =>
+        edit(() => {
+          const q = Math.max(0, Math.min(owned, p));
+          r.orders[i] = { passengerCars: q, freightCars: owned - q };
+        });
+      acts[`p--${i}`] = setP((o?.passengerCars ?? 0) - 1);
+      acts[`p+-${i}`] = setP((o?.passengerCars ?? 0) + 1);
+      acts[`f--${i}`] = setP((o?.passengerCars ?? 0) + 1);
+      acts[`f+-${i}`] = setP((o?.passengerCars ?? 0) - 1);
+      let cars: string;
+      if (owned === 0) cars = '<div class="sub">This train has no cars to arrange.</div>';
+      else {
+        cars =
+          `<div class="seg" role="group" aria-label="Cars at ${name}">` +
+          `<button type="button" class="segbtn${o ? '' : ' on'}" data-act="keep-${i}" aria-pressed="${!o}">Keep cars</button>` +
+          `<button type="button" class="segbtn${o ? ' on' : ''}" data-act="split-${i}" aria-pressed="${!!o}">Set cars here</button></div>`;
+        if (o) {
+          const st = (label: string, dnAct: string, upAct: string, n2: number, dn: boolean, up: boolean) =>
+            `<div class="stepper"><span>${label}</span><span class="ctl">` +
+            `<button type="button" data-act="${dnAct}-${i}" aria-label="Fewer ${label} at ${name}"${dn ? '' : ' disabled'}>−</button>` +
+            `<output>${n2}</output>` +
+            `<button type="button" data-act="${upAct}-${i}" aria-label="More ${label} at ${name}"${up ? '' : ' disabled'}>+</button></span></div>`;
+          cars +=
+            st('Passenger', 'p-', 'p+', o.passengerCars, o.passengerCars > 0, o.passengerCars < owned) +
+            st('Freight', 'f-', 'f+', o.freightCars, o.freightCars > 0, o.freightCars < owned);
+        }
+      }
+      list +=
+        `<div class="stoprow"><div class="stoptop"><b>${i + 1}. ${name}</b><span class="minis">` +
+        small(`up-${i}`, '↑', `Move ${name} up`, i === 0) +
+        small(`down-${i}`, '↓', `Move ${name} down`, i === n - 1) +
+        small(`rm-${i}`, '✕', `Remove ${name}`) +
+        `</span></div>${cars}</div>`;
+    });
+    setSheet(
+      `<div class="sheet-title">Route for ${trainName(train)}</div>` +
+        `<div class="editor-scroll">` +
+        (n ? list : '<div class="sub">No stops yet. Add at least two stations.</div>') +
+        `<button type="button" class="btn addstop" data-act="add">Add stop</button></div>` +
+        `<div class="sub">${n < 2 ? 'A route needs at least two stops.' : 'The train loops through these stops.'}</div>` +
+        (r.error ? `<div class="err">${humanError(r.error)}</div>` : '') +
+        `<div class="btns">${btn('cancel', 'Cancel')}${btn('save', 'Save route', 'primary', n < 2)}</div>`,
+      acts,
+      true,
+    );
+  }
+
+  function beginCars(train: Train): void {
+    clearSelection();
+    selTrainId = train.id;
+    carsEdit = { trainId: train.id, passengerCars: train.passengerCars, freightCars: train.freightCars };
+    renderSheet();
+    renderRoster();
+    requestDraw();
+  }
+
+  function renderCarsSheet(): void {
+    const c = carsEdit!;
+    const train = game.train(c.trainId);
+    if (!train) return;
+    const dp = c.passengerCars - train.passengerCars;
+    const df = c.freightCars - train.freightCars;
+    const price = (n: number, unit: number) => (n > 0 ? n * unit : Math.round(n * unit * CAR_RESALE_RATE));
+    const cost = price(dp, PASSENGER_CAR_COST) + price(df, FREIGHT_CAR_COST);
+    const added = Math.max(dp, 0) + Math.max(df, 0);
+    const removed = Math.max(-dp, 0) + Math.max(-df, 0);
+    let line = 'No change';
+    if (added && !removed) line = `Adds ${plural(added, 'car')}: ${money(cost)}`;
+    else if (removed && !added) line = `Takes off ${plural(removed, 'car')}: +${money(-cost)} back`;
+    else if (added && removed)
+      line = `Adds ${plural(added, 'car')}, takes off ${plural(removed, 'car')}: ${cost >= 0 ? money(cost) : `+${money(-cost)} back`}`;
+    const total = c.passengerCars + c.freightCars;
+    const broke = cost > game.cash;
+    const dropsOrders =
+      total !== train.passengerCars + train.freightCars && train.stopOrders.some((o) => o !== null);
+    const row = (label: string, key: 'pass' | 'freight', n: number) =>
+      `<div class="stepper"><span>${label}</span><span class="ctl">
+        <button type="button" data-act="${key}-" aria-label="Fewer ${label}"${n === 0 ? ' disabled' : ''}>−</button>
+        <output>${n}</output>
+        <button type="button" data-act="${key}+" aria-label="More ${label}"${total >= MAX_CARS ? ' disabled' : ''}>+</button></span></div>`;
+    const bump = (key: 'passengerCars' | 'freightCars', d: number) => () => {
+      const next = c[key] + d;
+      if (next < 0 || (d > 0 && c.passengerCars + c.freightCars >= MAX_CARS)) return;
+      c[key] = next;
+      renderSheet();
+    };
+    setSheet(
+      `<div class="sheet-title">Cars for ${trainName(train)}</div>` +
+        `<div class="sub">One locomotive, up to ${MAX_CARS} cars.</div>` +
+        row('Passenger cars', 'pass', c.passengerCars) +
+        row('Freight cars', 'freight', c.freightCars) +
+        `<div class="big" id="cars-price">${line}</div>` +
+        (dropsOrders
+          ? '<div class="warn">Changing the number of cars clears the per-stop car orders.</div>'
+          : '') +
+        (broke ? `<div class="err">Not enough cash: you have ${money(game.cash)}.</div>` : '') +
+        `<div class="btns">${btn('cancel', 'Cancel')}${btn('apply', 'Apply', 'primary', broke || (dp === 0 && df === 0))}</div>`,
+      {
+        cancel: clearSelection,
+        'pass-': bump('passengerCars', -1),
+        'pass+': bump('passengerCars', 1),
+        'freight-': bump('freightCars', -1),
+        'freight+': bump('freightCars', 1),
+        apply: () => {
+          const r = game.changeCars(c.trainId, {
+            passengerCars: c.passengerCars,
+            freightCars: c.freightCars,
+          });
+          updateHud();
+          if (!r.ok) {
+            showToast(humanError(r.error));
+            return;
+          }
+          persist();
+          showToast(
+            r.cost > 0
+              ? `Cars changed for ${money(r.cost)}`
+              : r.cost < 0
+                ? `Cars changed, ${money(-r.cost)} back`
+                : 'Cars changed',
+          );
+          carsEdit = null;
+          renderSheet();
+          renderRoster();
+        },
+      },
+    );
   }
 
   function renderTrackSheet(): void {
@@ -648,6 +874,7 @@ function start(hotData: unknown): void {
     stationTile = null;
     buy = null;
     routing = null;
+    carsEdit = null;
     selTrainId = null;
     selStation = null;
     renderSheet();
@@ -821,10 +1048,21 @@ function start(hotData: unknown): void {
     tp = null;
     stationTile = null;
     buy = null;
+    carsEdit = null;
     selStation = null;
     selTrainId = train.id;
-    routing = { trainId: train.id, stops: [], error: null };
+    routing = {
+      trainId: train.id,
+      stops: train.route.map((c) => ({ ...c })),
+      orders: train.route.map((_, i) => {
+        const o = train.stopOrders[i];
+        return o ? { ...o } : null;
+      }),
+      picking: train.route.length === 0,
+      error: null,
+    };
     renderSheet();
+    renderRoster();
     requestDraw();
   }
   function cancelRouting(): void {
@@ -836,13 +1074,21 @@ function start(hotData: unknown): void {
   function undoStop(): void {
     if (!routing) return;
     routing.stops.pop();
+    routing.orders.pop();
     routing.error = null;
     renderSheet();
     requestDraw();
   }
-  function finishRouting(): void {
+  function finishPicking(): void {
     if (!routing) return;
-    const r = game.setRoute(routing.trainId, routing.stops);
+    routing.picking = false;
+    routing.error = null;
+    renderSheet();
+    requestDraw();
+  }
+  function saveRoute(): void {
+    if (!routing) return;
+    const r = game.setRoute(routing.trainId, routing.stops, routing.orders);
     if (!r.ok) {
       routing.error = r.error;
       renderSheet();
@@ -850,7 +1096,7 @@ function start(hotData: unknown): void {
     }
     persist();
     routing = null;
-    showToast('Route set. The train is on its way.');
+    showToast('Route saved.');
     renderSheet();
     renderRoster();
     requestDraw();
@@ -889,6 +1135,7 @@ function start(hotData: unknown): void {
     const w = screenToWorld(sx, sy);
     const t = { x: Math.floor(w.x), y: Math.floor(w.y) };
     if (routing) {
+      if (!routing.picking) return;
       const st = stationNear(w.x, w.y);
       if (!st) {
         showToast('Tap a station to add it to the route.');
@@ -900,6 +1147,7 @@ function start(hotData: unknown): void {
         return;
       }
       routing.stops.push({ ...st.at });
+      routing.orders.push(null);
       routing.error = null;
       renderSheet();
       requestDraw();
@@ -1408,7 +1656,7 @@ function start(hotData: unknown): void {
     const key = sel ? `${sel.id}|${statusText(sel)}` : '';
     if (key !== lastTrainKey) {
       lastTrainKey = key;
-      if (sel && !routing) renderSheet();
+      if (sel && !routing && !carsEdit) renderSheet();
     }
   }
 

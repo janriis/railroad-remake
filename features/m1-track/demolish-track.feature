@@ -41,7 +41,7 @@ Feature: Demolishing track
     Then the command is rejected with "no track to demolish"
     And no money was spent
 
-  @wip @m2
+  @m2
   Scenario: Track under a station cannot be demolished
     Given existing track from (2, 2) to (6, 2)
     And a small station exists at (4, 2)
@@ -49,7 +49,7 @@ Feature: Demolishing track
     Then the command is rejected with "station on track"
     And the track network has 4 segments
 
-  @wip @m2
+  @m2
   Scenario: Track with a train on it cannot be demolished
     Given existing track from (2, 2) to (6, 2)
     And a train exists at (4, 2)
