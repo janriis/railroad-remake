@@ -153,3 +153,25 @@ sim exists.
   train running costs.
 - Rng determinism of breakdown rolls (same seed, same history) is not covered by a scenario.
 - The "player sees the extra-car sale before confirming" and train-sheet/toast items are UI and not specified here.
+
+## m8-finance
+
+- Interest is rounded per bond (principal x rate / 12 to whole dollars), then summed.
+- Share lots outside the stated sizes (e.g. buying 500 shares) are not specified and not tested; the commands
+  take the lot size as a count but only 1,000 (player) and 10,000 (company) are covered.
+- Share prices are whole cents; amounts like 90% or 110% of a cent price are exact only because lots are 1,000
+  or 10,000 shares. Scenarios use prices where the product is a whole dollar.
+- Cash of exactly $0 is not negative (no warning, ends a run of negative months). A dividend that leaves cash at
+  exactly $0 is paid.
+- Month-end order: costs (maintenance, running, upkeep, interest) are charged first, then the negative-cash
+  check, then the price is recomputed. Whether a restructuring happens before the price is recomputed is not
+  specified and not tested. Year-end dividends are paid after the December month end charges.
+- Restructuring halves each player's share count; odd counts (rounding) are not tested. The total number of
+  shares outstanding is unchanged (the removed shares go to the public).
+- Notices are asserted by substring: "dividend skipped", "cash is negative", "company restructured". The exact
+  wording is the implementer's choice as long as it contains these phrases.
+- "Operating profit" shown to the player is the sum of the last 12 completed monthly results; a month's result
+  includes bond interest and ignores construction, rolling stock and financing.
+- Fixture bonds ("the company has N bonds outstanding") are issued at 5%, 6%, 7% ... in order and give no cash.
+- The price history has one entry per month end, none for the starting price.
+- Equity in the price uses the live state at month end, after that month's charges.

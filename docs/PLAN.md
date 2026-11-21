@@ -76,9 +76,10 @@ npm test            # typecheck + unit + bdd
 | M4 | Rendering & UI | Canvas map, camera pan/zoom, build tools, train/station panels, Higgsfield assets in place, Playwright smoke. **Art direction (2026-11-21): flat vector**, top-down terrain/vehicles with buildings in a slight ¾ view; reference `assets/style-test/flat.jpg` |
 | M5 | Advanced economy | **Done.** Raw-material deposits outside towns (coal, timber, grain, ore); processing buildings the player builds inside stations (bakery, sawmill, flour mill, …); town demand with saturation; building profit and upkeep in the ledger. Design: [advanced-economy.md](advanced-economy.md) |
 | M6 | Eras & locomotives | **Done.** Real North American locomotive types (4-4-0 American to road-switcher diesels) on sale for a window of years, ageing (rising running cost, breakdowns that stop the train for 3 days past working life), overhaul and replace with trade-in; only locomotives age. Design: [locomotives.md](locomotives.md) |
-| M7 | Finance | Bonds with credit-based rates, shares (issue, buy back, player trades), share price from equity and earnings, yearly dividends, personal fortune / net worth, bankruptcy restructuring. Design: [finance.md](finance.md) |
-| M8 | Rivals & progression | AI railroads, ore/steel and later tech unlocks, scenarios with win conditions, save/load |
-| M9 | Polish | Audio, balancing pass, performance, tutorial |
+| M7 | Rolling stock & cargo types | Real North American car types, each carrying certain goods (passenger coach, mail & baggage car, boxcar, coal hopper, flatcar, covered hopper from 1930); per-type stop orders, capacity and prices; old freight cars kept as a legacy type. Design: [rolling-stock.md](rolling-stock.md) |
+| M8 | Finance | Bonds with credit-based rates, shares (issue, buy back, player trades), share price from equity and earnings, yearly dividends, personal fortune / net worth, bankruptcy restructuring. Design: [finance.md](finance.md) |
+| M9 | Rivals & progression | AI railroads, ore/steel and later tech unlocks, scenarios with win conditions, save/load |
+| M10 | Polish | Audio, balancing pass, performance, tutorial |
 
 M1–M3 are pure simulation, all driven by BDD. M4 brings visuals. This order gives a playable headless
 game early and keeps the expensive art for when the needs are known.

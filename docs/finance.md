@@ -1,4 +1,4 @@
-# M7 Finance: design
+# M8 Finance: design
 
 Status: rules agreed with the user 2026-11-21. Numbers are first guesses for balancing.
 
@@ -88,3 +88,17 @@ cannot pay its way goes bankrupt.
   written above. A trade needs enough shares on the other side ("not enough shares") and enough cash
   ("insufficient funds", or "insufficient personal funds" for the player).
 - **Repaying a bond** with nothing outstanding is rejected with "no bonds".
+- **Month-end order:**
+  1. running costs, upkeep and bond interest;
+  2. at year end, the dividend;
+  3. the bankruptcy check (warning or restructuring);
+  4. the new share price, added to the history.
+
+  The history holds month-end prices only, not the starting price.
+- **Negative cash** means below $0; exactly $0 is not negative. A restructuring halves the player's shares
+  rounding down in their favour (they keep `ceil(n / 2)`), and the total number of shares stays the same.
+- **Lot sizes:** the player trades in whole lots of 1,000 shares ("shares trade in lots of 1,000"), and the
+  company sells or buys back whole lots of 10,000 ("shares are issued in lots of 10,000").
+- **Share money:** every amount of share money is `round(shares × price × rate)` in whole dollars.
+- **Dividend:** set in whole cents and never negative ("dividend cannot be negative").
+- **Notices:** "cash is negative" (warning), "dividend skipped", "company restructured".
