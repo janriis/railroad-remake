@@ -1,4 +1,4 @@
-@m8 @wip
+@m8
 Feature: Bonds
   As a railroad owner
   I want to borrow money by issuing bonds

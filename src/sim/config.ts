@@ -452,3 +452,27 @@ export const CAR_KEEP_ORDER: readonly CarType[] = [
   'flatcar',
   'legacy-freight',
 ];
+
+// --- M8: finance ---------------------------------------------------------------------
+
+export const BOND_PRINCIPAL = 100_000;
+/** Interest rate in whole percent: the first bond outstanding pays this, each further bond 1 point more. */
+export const BOND_BASE_RATE_PCT = 5;
+export const BOND_RATE_STEP_PCT = 1;
+export const MAX_BONDS = 10;
+
+export const START_SHARES = 100_000;
+export const PLAYER_START_SHARES = 40_000;
+/** The company sells and buys back shares in lots of this many; the player trades in smaller lots. */
+export const COMPANY_SHARE_LOT = 10_000;
+export const PLAYER_SHARE_LOT = 1_000;
+export const NEW_SHARE_PRICE_RATE = 0.9;
+export const BUYBACK_PRICE_RATE = 1.1;
+
+/** Share price = (equity + EARNINGS_MULTIPLE x max(0, operating profit of 12 months)) / shares. */
+export const EARNINGS_MULTIPLE = 8;
+export const MIN_SHARE_PRICE_CENTS = 100;
+/** Track, stations and station buildings count at this share of their build cost. */
+export const ASSET_VALUE_RATE = 0.5;
+/** Negative cash at this many month ends in a row restructures the company. */
+export const BANKRUPTCY_MONTHS = 3;

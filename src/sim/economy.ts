@@ -57,6 +57,9 @@ export const LEDGER_CATEGORIES = [
   'trainRunning',
   'goodsSales',
   'buildingUpkeep',
+  'interest',
+  'financingIn',
+  'financingOut',
 ] as const;
 export type LedgerCategory = (typeof LEDGER_CATEGORIES)[number];
 
@@ -71,9 +74,26 @@ export const emptyLedgerYear = (): LedgerYear => ({
   trainRunning: 0,
   goodsSales: 0,
   buildingUpkeep: 0,
+  interest: 0,
+  financingIn: 0,
+  financingOut: 0,
 });
 
 export const runningCosts = (y: LedgerYear): number => -(y.trackMaintenance + y.trainRunning);
 
-/** Net result for the year: income minus all spending. */
-export const profit = (y: LedgerYear): number => LEDGER_CATEGORIES.reduce((sum, c) => sum + y[c], 0);
+/** Money moved by bonds, share sales, buybacks and dividends: not part of profit. */
+export const FINANCING: readonly LedgerCategory[] = ['financingIn', 'financingOut'];
+
+/** Income and running costs that make up operating profit (no construction, rolling stock or financing). */
+export const OPERATING: readonly LedgerCategory[] = [
+  'cargoIncome',
+  'goodsSales',
+  'trackMaintenance',
+  'trainRunning',
+  'buildingUpkeep',
+  'interest',
+];
+
+/** Net result for the year: income minus all spending, leaving out financing. */
+export const profit = (y: LedgerYear): number =>
+  LEDGER_CATEGORIES.reduce((sum, c) => sum + (FINANCING.includes(c) ? 0 : y[c]), 0);

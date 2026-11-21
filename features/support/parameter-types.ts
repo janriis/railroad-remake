@@ -91,3 +91,10 @@ defineParameterType({
   regexp: new RegExp(`\\d+ (?:${CAR_NAME_PATTERN})(?:(?:, | and )\\d+ (?:${CAR_NAME_PATTERN}))*`),
   transformer: (s: string): CarMix => parseCarList(s),
 });
+
+/** $9.75 — dollars and whole cents, as integer cents. */
+defineParameterType({
+  name: 'price',
+  regexp: /\$\d{1,3}(?:,\d{3})*\.\d{2}|\$\d+\.\d{2}/,
+  transformer: (s: string): number => Math.round(Number(s.replace(/[$,]/g, '')) * 100),
+});

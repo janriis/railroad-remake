@@ -1,4 +1,4 @@
-@m8 @wip
+@m8
 Feature: Share price
   As a railroad owner
   I want the company's shares to be priced by what it owns and earns

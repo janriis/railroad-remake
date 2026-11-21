@@ -6,6 +6,20 @@ import {
   DIAGONAL_COST_FACTOR,
   MAX_BRIDGE_WATER_TILES,
   AGE_RUNNING_COST_RATE,
+  ASSET_VALUE_RATE,
+  BANKRUPTCY_MONTHS,
+  BOND_BASE_RATE_PCT,
+  BOND_PRINCIPAL,
+  BOND_RATE_STEP_PCT,
+  BUYBACK_PRICE_RATE,
+  COMPANY_SHARE_LOT,
+  EARNINGS_MULTIPLE,
+  MAX_BONDS,
+  MIN_SHARE_PRICE_CENTS,
+  NEW_SHARE_PRICE_RATE,
+  PLAYER_SHARE_LOT,
+  PLAYER_START_SHARES,
+  START_SHARES,
   BREAD_GROWTH_RATE,
   CAR,
   CAR_FILL_ORDER,
@@ -56,6 +70,8 @@ import {
 } from './cargo';
 import {
   DAYS_PER_YEAR,
+  MONTH_NAMES,
+  OPERATING,
   TICKS_PER_MONTH,
   dateAt,
   emptyLedgerYear,
@@ -157,6 +173,21 @@ export interface SaveData {
     breadThisYear?: number;
   }[];
   readonly stationBuildings?: StationBuilding[][];
+  readonly finance?: {
+    bonds: { principal: number; ratePct: number }[];
+    sharesOutstanding: number;
+    playerShares: number;
+    personalCash: number;
+    dividendCents: number;
+    sharePriceCents: number;
+    priceHistory: number[];
+    negativeMonths: number;
+    restructurings: number;
+    notices: string[];
+    monthlyOps: number[];
+    opsAtLastMonthEnd: number;
+  };
+
   readonly stationWaiting?: WaitingLot[][];
   readonly industries?: Omit<Industry, 'id'>[];
 }
@@ -178,6 +209,24 @@ export class Game {
   time = 0;
   /** Yearly accounts, keyed by year. */
   readonly ledger = new Map<number, LedgerYear>();
+  /** Bonds outstanding, oldest first; the rate is in whole percent, fixed at issue. */
+  readonly bonds: { principal: number; ratePct: number }[] = [];
+  sharesOutstanding = START_SHARES;
+  playerShares = PLAYER_START_SHARES;
+  /** The player's own money, apart from the company's. */
+  personalCash = 0;
+  dividendCents = 0;
+  /** Share price at the last month end, in cents; commands trade at this price. */
+  sharePriceCents = 0;
+  /** Share price at every month end so far, in cents. */
+  readonly priceHistory: number[] = [];
+  negativeMonths = 0;
+  restructurings = 0;
+  /** Messages for the player, newest last. */
+  readonly notices: string[] = [];
+  /** Operating result of each completed month, newest last (at most 12 kept). */
+  private readonly monthlyOps: number[] = [];
+  private opsAtLastMonthEnd = 0;
   readonly industries: Industry[] = [];
   private nextId = 1;
 
@@ -191,6 +240,7 @@ export class Game {
   ) {
     this.rng = new Rng(seed);
     this.cash = startingCash;
+    this.sharePriceCents = this.computeSharePriceCents();
   }
 
   /** A blank map of one terrain, for tests and sandboxes. */
@@ -986,6 +1036,180 @@ export class Game {
     return ok(cost);
   }
 
+  // --- Finance: bonds, shares, dividends, solvency --------------------------------
+
+  /** Borrow $100,000. The rate is 5% plus a point for every bond already outstanding. */
+  issueBond(): CommandResult {
+    if (this.bonds.length >= MAX_BONDS) return fail('credit limit reached');
+    this.bonds.push({
+      principal: BOND_PRINCIPAL,
+      ratePct: BOND_BASE_RATE_PCT + BOND_RATE_STEP_PCT * this.bonds.length,
+    });
+    this.spend(-BOND_PRINCIPAL, 'financingIn');
+    return ok(-BOND_PRINCIPAL);
+  }
+
+  /** Pay back the most expensive bond outstanding. */
+  repayBond(): CommandResult {
+    if (this.bonds.length === 0) return fail('no bonds');
+    const i = this.bonds.reduce((best, b, k) => (b.ratePct > this.bonds[best]!.ratePct ? k : best), 0);
+    const { principal } = this.bonds[i]!;
+    if (principal > this.cash) return fail('insufficient funds');
+    this.bonds.splice(i, 1);
+    this.spend(principal, 'financingOut');
+    return ok(principal);
+  }
+
+  get debt(): number {
+    return this.bonds.reduce((n, b) => n + b.principal, 0);
+  }
+
+  private payInterest(year: number): void {
+    for (const b of this.bonds)
+      this.spend(Math.round((b.principal * b.ratePct) / 100 / 12), 'interest', year);
+  }
+
+  /** What the company owns, at half its build cost today (trains at trade-in and resale value). */
+  assetValue(): number {
+    let value = 0;
+    for (const seg of this.track.segments()) {
+      const cost = this.lineCost(seg.a, seg.b);
+      if (typeof cost === 'number') value += cost * ASSET_VALUE_RATE * (seg.double ? 2 : 1);
+    }
+    for (const st of this.stations.values()) {
+      value += STATION[st.size].cost * ASSET_VALUE_RATE;
+      for (const b of st.buildings) value += BUILDING[b.kind].cost * ASSET_VALUE_RATE;
+    }
+    for (const t of this.trains) value += this.tradeInValue(t) + mixValue(t.owned, CAR_RESALE_RATE);
+    return Math.round(value);
+  }
+
+  equity(): number {
+    return this.cash + this.assetValue() - this.debt;
+  }
+
+  /** Income minus running costs over the last 12 completed months. */
+  operatingProfit(): number {
+    return this.monthlyOps.reduce((n, m) => n + m, 0);
+  }
+
+  private operatingTotal(): number {
+    let n = 0;
+    for (const page of this.ledger.values()) for (const c of OPERATING) n += page[c];
+    return n;
+  }
+
+  private recordOperatingMonth(): void {
+    const total = this.operatingTotal();
+    this.monthlyOps.push(total - this.opsAtLastMonthEnd);
+    this.opsAtLastMonthEnd = total;
+    if (this.monthlyOps.length > 12) this.monthlyOps.shift();
+  }
+
+  private computeSharePriceCents(): number {
+    const value = this.equity() + EARNINGS_MULTIPLE * Math.max(0, this.operatingProfit());
+    return Math.max(MIN_SHARE_PRICE_CENTS, Math.round((value * 100) / this.sharesOutstanding));
+  }
+
+  private updateSharePrice(): void {
+    this.sharePriceCents = this.computeSharePriceCents();
+    this.priceHistory.push(this.sharePriceCents);
+  }
+
+  /** Money for `shares` at the last month-end price times `rate`, in whole dollars. */
+  private shareMoney(shares: number, rate = 1): number {
+    return Math.round((shares * this.sharePriceCents * rate) / 100);
+  }
+
+  get publicShares(): number {
+    return this.sharesOutstanding - this.playerShares;
+  }
+
+  /** Sell new shares to the public at 90% of the price; the money goes to the company. */
+  sellNewShares(shares: number): CommandResult {
+    if (shares <= 0 || shares % COMPANY_SHARE_LOT !== 0) return fail('shares are issued in lots of 10,000');
+    const money = this.shareMoney(shares, NEW_SHARE_PRICE_RATE);
+    this.sharesOutstanding += shares;
+    this.spend(-money, 'financingIn');
+    return ok(-money);
+  }
+
+  /** Buy back public shares at 110% of the price from company cash. */
+  buyBackShares(shares: number): CommandResult {
+    if (shares <= 0 || shares % COMPANY_SHARE_LOT !== 0) return fail('shares are issued in lots of 10,000');
+    if (shares > this.publicShares) return fail('not enough shares');
+    const money = this.shareMoney(shares, BUYBACK_PRICE_RATE);
+    if (money > this.cash) return fail('insufficient funds');
+    this.sharesOutstanding -= shares;
+    this.spend(money, 'financingOut');
+    return ok(money);
+  }
+
+  /** The player buys shares from the public with personal cash. */
+  buySharesAsPlayer(shares: number): CommandResult {
+    if (shares <= 0 || shares % PLAYER_SHARE_LOT !== 0) return fail('shares trade in lots of 1,000');
+    if (shares > this.publicShares) return fail('not enough shares');
+    const money = this.shareMoney(shares);
+    if (money > this.personalCash) return fail('insufficient personal funds');
+    this.personalCash -= money;
+    this.playerShares += shares;
+    return ok(0);
+  }
+
+  /** The player sells shares to the public for personal cash. */
+  sellSharesAsPlayer(shares: number): CommandResult {
+    if (shares <= 0 || shares % PLAYER_SHARE_LOT !== 0) return fail('shares trade in lots of 1,000');
+    if (shares > this.playerShares) return fail('not enough shares');
+    this.personalCash += this.shareMoney(shares);
+    this.playerShares -= shares;
+    return ok(0);
+  }
+
+  /** The yearly dividend per share, in cents. */
+  setDividend(cents: number): CommandResult {
+    if (cents < 0) return fail('dividend cannot be negative');
+    this.dividendCents = Math.round(cents);
+    return ok(0);
+  }
+
+  /** The player's score: personal cash plus their shares at the share price. */
+  netWorth(): number {
+    return this.personalCash + this.shareMoney(this.playerShares);
+  }
+
+  private notify(message: string): void {
+    this.notices.push(`${fmtDate(this.date)}: ${message}`);
+  }
+
+  private payDividend(year: number): void {
+    if (this.dividendCents === 0) return;
+    const total = Math.round((this.sharesOutstanding * this.dividendCents) / 100);
+    if (this.cash - total < 0) {
+      this.notify('dividend skipped: not enough cash');
+      return;
+    }
+    this.spend(total, 'financingOut', year);
+    this.personalCash += Math.round((this.playerShares * this.dividendCents) / 100);
+  }
+
+  /** Warn at the first month end in the red; restructure at the third in a row. */
+  private checkSolvency(year: number): void {
+    if (this.cash >= 0) {
+      this.negativeMonths = 0;
+      return;
+    }
+    this.negativeMonths++;
+    if (this.negativeMonths === 1)
+      this.notify('cash is negative: raise money or the company will be restructured');
+    if (this.negativeMonths < BANKRUPTCY_MONTHS) return;
+    for (const b of this.bonds) b.principal = Math.round(b.principal / 2);
+    this.playerShares = Math.ceil(this.playerShares / 2);
+    this.spend(this.cash, 'financingIn', year);
+    this.restructurings++;
+    this.negativeMonths = 0;
+    this.notify('company restructured: debt and your shares halved, cash set to $0');
+  }
+
   // --- Time --------------------------------------------------------------------
 
   tick(): void {
@@ -1020,6 +1244,11 @@ export class Game {
     this.spend(costs.trackMaintenance, 'trackMaintenance', year);
     this.spend(costs.trainRunning, 'trainRunning', year);
     this.rollBreakdowns(year);
+    this.payInterest(year);
+    this.recordOperatingMonth();
+    if (ended.month === 11) this.payDividend(year);
+    this.checkSolvency(year);
+    this.updateSharePrice();
   }
 
   // --- Money -------------------------------------------------------------------
@@ -1083,6 +1312,21 @@ export class Game {
       })),
       stationWaiting: [...this.stations.values()].map((s) => s.waiting),
       stationBuildings: [...this.stations.values()].map((s) => s.buildings),
+      finance: {
+        bonds: this.bonds,
+        sharesOutstanding: this.sharesOutstanding,
+        playerShares: this.playerShares,
+        personalCash: this.personalCash,
+        dividendCents: this.dividendCents,
+        sharePriceCents: this.sharePriceCents,
+        priceHistory: this.priceHistory,
+        negativeMonths: this.negativeMonths,
+        restructurings: this.restructurings,
+        notices: this.notices,
+        monthlyOps: this.monthlyOps,
+        opsAtLastMonthEnd: this.opsAtLastMonthEnd,
+      },
+
       industries: this.industries.map((i) => ({
         kind: i.kind,
         at: i.at,
@@ -1093,6 +1337,28 @@ export class Game {
     };
   }
 
+  private restoreFinance(save: SaveData): void {
+    const f = save.finance;
+    if (!f) {
+      // Saves from before M8: start measuring operating months from now.
+      this.opsAtLastMonthEnd = this.operatingTotal();
+      this.sharePriceCents = this.computeSharePriceCents();
+      return;
+    }
+    this.bonds.push(...f.bonds);
+    this.sharesOutstanding = f.sharesOutstanding;
+    this.playerShares = f.playerShares;
+    this.personalCash = f.personalCash;
+    this.dividendCents = f.dividendCents;
+    this.sharePriceCents = f.sharePriceCents;
+    this.priceHistory.push(...f.priceHistory);
+    this.negativeMonths = f.negativeMonths;
+    this.restructurings = f.restructurings;
+    this.notices.push(...f.notices);
+    this.monthlyOps.push(...f.monthlyOps);
+    this.opsAtLastMonthEnd = f.opsAtLastMonthEnd;
+  }
+
   /** Restores a save. Trains restart from the tile they last reached. */
   static fromSave(save: SaveData): Game {
     const game = Game.generate(save.gen);
@@ -1101,6 +1367,7 @@ export class Game {
     for (const { year, ...page } of save.ledger ?? [])
       game.ledger.set(year, { ...emptyLedgerYear(), ...page });
     for (const s of save.segments) game.track.add(s.a, s.b, s.bridge, s.double ?? false);
+    game.restoreFinance(save);
     save.towns?.forEach((t, i) => Object.assign(game.towns[i]!, { soldThisMonth: {}, breadThisYear: 0 }, t));
     if (save.industries) {
       game.industries.length = 0;
@@ -1190,3 +1457,5 @@ function fromLegacy(c: CarMix | LegacyCarCounts): CarMix {
 /** Consecutive tile pairs of a path. */
 const pairs = (path: readonly Coord[]): [Coord, Coord][] =>
   path.slice(1).map((c, i) => [path[i]!, c] as [Coord, Coord]);
+
+const fmtDate = (d: GameDate): string => `${d.day} ${MONTH_NAMES[d.month]} ${d.year}`;

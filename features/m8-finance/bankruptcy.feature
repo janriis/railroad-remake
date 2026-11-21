@@ -1,4 +1,4 @@
-@m8 @wip
+@m8
 Feature: Bankruptcy
   As a railroad owner
   I want a company that cannot pay its way to be restructured

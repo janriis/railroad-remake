@@ -1,4 +1,4 @@
-@m8 @wip
+@m8
 Feature: Dividends
   As a railroad owner
   I want to pay a dividend to the shareholders

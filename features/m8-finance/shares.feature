@@ -1,4 +1,4 @@
-@m8 @wip
+@m8
 Feature: Shares
   As a railroad owner
   I want to sell new shares, buy them back and trade my own
