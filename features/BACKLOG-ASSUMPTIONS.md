@@ -121,3 +121,35 @@ sim exists.
 - Direct sales to a station that serves no town buy nothing; the delivered goods wait at the station.
 - Freight pay for a direct-sale delivery is computed as today and paid in addition to the sale.
 - Coal needs a freight rate per unit per tile (not in the design); no scenario depends on it.
+
+## m6-locomotives
+
+- Order of fixtures: "the calendar starts on ..." must precede the steps that create trains, because a train's
+  purchase time is the game date when it was created; "the train is N years old" sets purchase time to
+  `now - N x 360 days`.
+- Age is evaluated at the moment of each month-end charge. Which charge is the first at age 1 (day 360 itself)
+  is not specified and not tested.
+- "Worn out" means `age >= working life`. Per the breakdown formula the chance at `age == working life` is still
+  1%; it first rises at `working life + 1` (3%). The design's "1% in the first year past it" is read this way.
+- Working life left = `max(0, working life - age)` years.
+- Buying with a model uses the existing buy step extended with the model: "I buy a Courier locomotive with
+  2 passenger cars at the station at (2, 5)". Rejection order for a buy: "model not on sale" is not combined
+  with other errors in any scenario.
+- "it cost" for a replacement is the net cash change: new price - trade-in - sale of extra cars.
+- Replacing with the same model is allowed and works like a renewal (trade-in applies, age resets).
+- A locomotive that is no longer on sale can still be traded in; only the new model must be on sale.
+- Overhaul and replace also reject with "insufficient funds" (the design lists it only for replace). Neither
+  spends anything when rejected.
+- The old save fixture (Pioneer with 6 cars) is made directly by the Given step, which does not check the car limit.
+- A train rolls for a breakdown at month end even without a route (a train standing at a station can break down);
+  a broken-down train at a station still holds the station tile but other trains may use it as before.
+- Breakdown roll applies to all trains at once under "breakdowns always happen"; a train that is already broken
+  down at month end is not rolled again (not tested).
+- A breakdown stops the train for exactly 72 hours from the month-end tick; scenarios leave 1 day of margin on
+  either side rather than pinning the tick order.
+- "a train that is broken down for N days exists at ..." places a train that is already broken down (not charged)
+  and registers it as the "slow train" for the block-signalling assertions.
+- Ledger category of overhaul and replacement ("rolling stock") is not asserted; scenarios only show they are not
+  train running costs.
+- Rng determinism of breakdown rolls (same seed, same history) is not covered by a scenario.
+- The "player sees the extra-car sale before confirming" and train-sheet/toast items are UI and not specified here.
