@@ -557,7 +557,8 @@ export class Game {
     if (!train) return fail('no such train');
     if (!this.isStation(at)) return fail('not a station');
     if (sameAt(train.at, at) && !train.next) return fail('the train is already there');
-    if (!findTrackPath(this.track, train.next ?? train.at, at)) return fail(`no track connects ${fmt(train.at)} and ${fmt(at)}`);
+    if (!findTrackPath(this.track, train.next ?? train.at, at))
+      return fail(`no track connects ${fmt(train.at)} and ${fmt(at)}`);
     train.trip = { ...at };
     train.plan = [];
     return ok(0);
@@ -608,7 +609,9 @@ export class Game {
       const n = Math.min(available, room[kind]);
       if (n <= 0) return 0;
       room[kind] -= n;
-      const lot = train.cargo.find((l) => l.cargo === cargo && sameAt(l.from, station.at) && l.loadedAt === this.time);
+      const lot = train.cargo.find(
+        (l) => l.cargo === cargo && sameAt(l.from, station.at) && l.loadedAt === this.time,
+      );
       if (lot) lot.units += n;
       else train.cargo.push({ cargo, units: n, from: { ...station.at }, loadedAt: this.time });
       return n;
@@ -722,7 +725,12 @@ export class Game {
       cash: this.cash,
       time: this.time,
       ledger: [...this.ledger].map(([year, page]) => ({ year, ...page })),
-      segments: [...this.track.segments()].map((s) => ({ a: s.a, b: s.b, bridge: s.bridge, ...(s.double ? { double: true } : {}) })),
+      segments: [...this.track.segments()].map((s) => ({
+        a: s.a,
+        b: s.b,
+        bridge: s.bridge,
+        ...(s.double ? { double: true } : {}),
+      })),
       stations: [...this.stations.values()].map((s) => ({ at: s.at, size: s.size })),
       trains: this.trains.map((t) => ({
         at: t.at,
@@ -743,7 +751,13 @@ export class Game {
         carriedThisYear: t.carriedThisYear,
       })),
       stationWaiting: [...this.stations.values()].map((s) => s.waiting),
-      industries: this.industries.map((i) => ({ kind: i.kind, at: i.at, stock: i.stock, input: i.input, received: i.received })),
+      industries: this.industries.map((i) => ({
+        kind: i.kind,
+        at: i.at,
+        stock: i.stock,
+        input: i.input,
+        received: i.received,
+      })),
     };
   }
 
@@ -752,14 +766,17 @@ export class Game {
     const game = Game.generate(save.gen);
     game.cash = save.cash;
     game.time = save.time;
-    for (const { year, ...page } of save.ledger ?? []) game.ledger.set(year, { ...emptyLedgerYear(), ...page });
+    for (const { year, ...page } of save.ledger ?? [])
+      game.ledger.set(year, { ...emptyLedgerYear(), ...page });
     for (const s of save.segments) game.track.add(s.a, s.b, s.bridge, s.double ?? false);
     save.towns?.forEach((t, i) => Object.assign(game.towns[i]!, t));
     if (save.industries) {
       game.industries.length = 0;
       for (const i of save.industries) Object.assign(game.addIndustry(i.kind, i.at), i);
     }
-    save.stations.forEach((s, i) => game.addStation(s.size, s.at).waiting.push(...(save.stationWaiting?.[i] ?? [])));
+    save.stations.forEach((s, i) =>
+      game.addStation(s.size, s.at).waiting.push(...(save.stationWaiting?.[i] ?? [])),
+    );
     for (const t of save.trains) {
       const train = game.addTrain(t);
       train.route = t.route;
@@ -784,7 +801,9 @@ function addWaiting(station: Station, cargo: Cargo, source: string, units: numbe
 }
 
 function capacity(train: Train, kind: 'passenger' | 'freight'): number {
-  return kind === 'passenger' ? train.passengerCars * PASSENGER_CAR_CAPACITY : train.freightCars * FREIGHT_CAR_CAPACITY;
+  return kind === 'passenger'
+    ? train.passengerCars * PASSENGER_CAR_CAPACITY
+    : train.freightCars * FREIGHT_CAR_CAPACITY;
 }
 
 function spareRoom(train: Train, kind: 'passenger' | 'freight'): number {

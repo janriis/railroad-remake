@@ -85,7 +85,8 @@ function placeIndustries(rng: Rng, map: GameMap, towns: readonly Town[]): Indust
     for (const c of candidates) {
       if (placed === perKind) break;
       if (map.terrainAt(c) !== INDUSTRY[kind].terrain) continue;
-      if (taken.some((t) => Math.max(Math.abs(t.x - c.x), Math.abs(t.y - c.y)) < MAPGEN.minIndustryDistance)) continue;
+      if (taken.some((t) => Math.max(Math.abs(t.x - c.x), Math.abs(t.y - c.y)) < MAPGEN.minIndustryDistance))
+        continue;
       sites.push({ kind, at: c });
       taken.push(c);
       placed++;

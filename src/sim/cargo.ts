@@ -77,7 +77,10 @@ export function townTiles(centre: Coord): TownTile[] {
   for (let dy = -TOWN_RADIUS; dy <= TOWN_RADIUS; dy++)
     for (let dx = -TOWN_RADIUS; dx <= TOWN_RADIUS; dx++) {
       const inner = Math.max(Math.abs(dx), Math.abs(dy)) <= 1;
-      tiles.push({ at: { x: centre.x + dx, y: centre.y + dy }, weight: inner ? INNER_TILE_WEIGHT : OUTER_TILE_WEIGHT });
+      tiles.push({
+        at: { x: centre.x + dx, y: centre.y + dy },
+        weight: inner ? INNER_TILE_WEIGHT : OUTER_TILE_WEIGHT,
+      });
     }
   return tiles;
 }

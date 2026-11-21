@@ -75,7 +75,16 @@ export const OPPOSING_TRAFFIC_PENALTY_TILES = 4;
 
 // --- M3: cargo ------------------------------------------------------------------
 
-export const CARGO_TYPES = ['passengers', 'mail', 'timber', 'lumber', 'furniture', 'grain', 'flour', 'loaves'] as const;
+export const CARGO_TYPES = [
+  'passengers',
+  'mail',
+  'timber',
+  'lumber',
+  'furniture',
+  'grain',
+  'flour',
+  'loaves',
+] as const;
 export type Cargo = (typeof CARGO_TYPES)[number];
 
 /** Payment per unit per tile, and which kind of car carries it. */
@@ -108,7 +117,14 @@ export const TOWN_RADIUS = 2;
 export const TOWN_GROWTH_RATE = 0.1;
 export const TOWN_POPULATION = { min: 400, max: 3_000 } as const;
 
-export const INDUSTRY_KINDS = ['timber-camp', 'sawmill', 'furniture-works', 'grain-farm', 'flour-mill', 'bakery'] as const;
+export const INDUSTRY_KINDS = [
+  'timber-camp',
+  'sawmill',
+  'furniture-works',
+  'grain-farm',
+  'flour-mill',
+  'bakery',
+] as const;
 export type IndustryKind = (typeof INDUSTRY_KINDS)[number];
 
 /**
