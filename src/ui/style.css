@@ -775,3 +775,99 @@ button:focus-visible {
   font-size: 14px;
   margin-bottom: 6px;
 }
+
+/* Route editor: drag to reorder, insert slots, station picker */
+.stoprow {
+  position: relative;
+  background: var(--surface);
+  transition: transform 0.12s ease;
+}
+.stoprow.clash .stoptop b {
+  color: var(--danger);
+}
+.stoprow.lifted {
+  transition: none;
+  z-index: 2;
+  box-shadow: var(--shadow);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.editor-scroll.dragging {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.grip {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin-left: -6px;
+  font-size: 22px;
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.lifted .grip {
+  cursor: grabbing;
+}
+.stoptop b {
+  flex: 1;
+  min-width: 0;
+}
+.insertslot {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--accent);
+}
+.insertslot::before,
+.insertslot::after {
+  content: '';
+  flex: 1;
+  border-top: 1px dashed var(--border);
+}
+.insertslot span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 22px;
+  margin: 0 8px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-weight: 700;
+  line-height: 1;
+}
+.insertslot:hover span,
+.insertslot:focus-visible span {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 0;
+}
+.picker .segbtn {
+  flex: 0 1 auto;
+  padding: 0 12px;
+}
+.picker .segbtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+@media (prefers-reduced-motion: reduce) {
+  .stoprow {
+    transition: none;
+  }
+}

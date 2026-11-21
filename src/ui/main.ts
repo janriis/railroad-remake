@@ -61,6 +61,8 @@ interface RouteState {
   orders: (CarCounts | null)[];
   /** True while tapping stations on the map; false while editing the list. */
   picking: boolean;
+  /** List editor: index the station picker will insert at (stops.length = append), or null when closed. */
+  picker: number | null;
   error: string | null;
 }
 
@@ -155,6 +157,8 @@ function start(hotData: unknown): void {
   let stationTile: Coord | null = null;
   let buy: BuyState | null = null;
   let routing: RouteState | null = null;
+  /** Index of the stop being dragged in the route editor (highlighted on the map). */
+  let dragStop: number | null = null;
   let carsEdit: CarsState | null = null;
   let selTrainId: number | null = null;
   let selStation: Station | null = null;
@@ -586,13 +590,16 @@ function start(hotData: unknown): void {
     const acts: Record<string, () => void> = {
       cancel: cancelRouting,
       add: () => {
-        r.picking = true;
-        r.error = null;
+        r.picker = r.picker === n ? null : n;
         renderSheet();
-        requestDraw();
+      },
+      'close-picker': () => {
+        r.picker = null;
+        renderSheet();
       },
       save: saveRoute,
     };
+    const dups = duplicateStops(r.stops);
     const edit = (fn: () => void) => () => {
       fn();
       r.error = null;
@@ -606,9 +613,37 @@ function start(hotData: unknown): void {
     };
     const small = (act: string, label: string, aria: string, disabled = false) =>
       `<button type="button" class="mini" data-act="${act}" aria-label="${aria}"${disabled ? ' disabled' : ''}>${label}</button>`;
+    const pickerHtml = (at: number): string => {
+      const prev = r.stops[(at - 1 + n) % n];
+      const next = r.stops[at % n];
+      let h = '<div class="picker" role="group" aria-label="Choose a station to insert">';
+      [...game.stations.values()].forEach((st, k) => {
+        const clash = (prev && n > 0 && sameCoord(prev, st.at)) || (next && n > 0 && sameCoord(next, st.at));
+        acts[`pick-${k}`] = () => {
+          if (clash) return;
+          r.stops.splice(at, 0, { ...st.at });
+          r.orders.splice(at, 0, null);
+          r.picker = null;
+          r.error = null;
+          renderSheet();
+          renderRoster();
+          requestDraw();
+        };
+        h += `<button type="button" class="segbtn" data-act="pick-${k}"${clash ? ' disabled' : ''}>${stationNameAt(st.at)}</button>`;
+      });
+      return h + `<button type="button" class="mini txt" data-act="close-picker">Close</button></div>`;
+    };
+    const slot = (at: number, label: string): string =>
+      r.picker === at
+        ? pickerHtml(at)
+        : `<button type="button" class="insertslot" data-act="ins-${at}" aria-label="${label}"><span>+</span></button>`;
     let list = '';
     r.stops.forEach((c, i) => {
       const name = stationNameAt(c);
+      acts[`ins-${i}`] = () => {
+        r.picker = i;
+        renderSheet();
+      };
       const o = r.orders[i] ?? null;
       acts[`up-${i}`] = edit(() => swap(i, i - 1));
       acts[`down-${i}`] = edit(() => swap(i, i + 1));
@@ -650,7 +685,9 @@ function start(hotData: unknown): void {
         }
       }
       list +=
-        `<div class="stoprow"><div class="stoptop"><b>${i + 1}. ${name}</b><span class="minis">` +
+        `<div class="stoprow${dups.has(i) ? ' clash' : ''}" data-row="${i}">` +
+        slot(i, `Insert a stop before ${name}`) +
+        `<div class="stoptop"><span class="grip" data-grip="${i}" aria-hidden="true">⠿</span><b>${i + 1}. ${name}</b><span class="minis">` +
         small(`up-${i}`, '↑', `Move ${name} up`, i === 0) +
         small(`down-${i}`, '↓', `Move ${name} down`, i === n - 1) +
         small(`rm-${i}`, '✕', `Remove ${name}`) +
@@ -660,14 +697,161 @@ function start(hotData: unknown): void {
       `<div class="sheet-title">Route for ${trainName(train)}</div>` +
         `<div class="editor-scroll">` +
         (n ? list : '<div class="sub">No stops yet. Add at least two stations.</div>') +
+        (r.picker === n && n > 0 ? pickerHtml(n) : '') +
         `<button type="button" class="btn addstop" data-act="add">Add stop</button></div>` +
-        `<div class="sub">${n < 2 ? 'A route needs at least two stops.' : 'The train loops through these stops.'}</div>` +
+        `<div class="sub">${n < 2 ? 'A route needs at least two stops.' : 'Drag ⠿ to reorder, tap + to insert, or tap a station on the map to add it at the end.'}</div>` +
+        (dups.size
+          ? `<div class="warn">Neighbouring stops are the same station: ${[...dups]
+              .sort((a, b) => a - b)
+              .map((i) => `${i + 1}. ${stationNameAt(r.stops[i]!)}`)
+              .join(', ')}. The route loops, so last and first count too.</div>`
+          : '') +
         (r.error ? `<div class="err">${humanError(r.error)}</div>` : '') +
-        `<div class="btns">${btn('cancel', 'Cancel')}${btn('save', 'Save route', 'primary', n < 2)}</div>`,
+        `<div class="btns">${btn('cancel', 'Cancel')}${btn('save', 'Save route', 'primary', n < 2 || dups.size > 0)}</div>`,
       acts,
       true,
     );
   }
+
+  /** Indices of stops that equal the next stop (the route loops, so last -> first counts). */
+  function duplicateStops(stops: Coord[]): Set<number> {
+    const out = new Set<number>();
+    const n = stops.length;
+    if (n < 2) return out;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      if (i !== j && sameCoord(stops[i]!, stops[j]!)) {
+        out.add(i);
+        out.add(j);
+      }
+    }
+    return out;
+  }
+
+  function moveStop(from: number, to: number): void {
+    const r = routing;
+    if (!r || from === to) return;
+    const [c] = r.stops.splice(from, 1);
+    const [o] = r.orders.splice(from, 1);
+    r.stops.splice(to, 0, c!);
+    r.orders.splice(to, 0, o ?? null);
+    r.error = null;
+    r.picker = null;
+  }
+
+  // Pointer-based drag reorder of stop rows. Live transforms only; commit on drop.
+  interface DragState {
+    pid: number;
+    from: number;
+    to: number;
+    startY: number;
+    clientY: number;
+    startScroll: number;
+    sc: HTMLElement;
+    rows: HTMLElement[];
+    centers: number[];
+    heights: number[];
+    raf: number;
+  }
+  let drag: DragState | null = null;
+  const dragApply = (d: DragState): void => {
+    const dy = d.clientY - d.startY + (d.sc.scrollTop - d.startScroll);
+    const mid = d.centers[d.from]! + dy;
+    let to = 0;
+    d.centers.forEach((c, j) => {
+      if (j !== d.from && c < mid) to++;
+    });
+    d.to = to;
+    const h = d.heights[d.from]!;
+    d.rows.forEach((row, j) => {
+      if (j === d.from) {
+        row.style.transform = `translateY(${dy}px)`;
+        return;
+      }
+      let shift = 0;
+      if (to > d.from && j > d.from && j <= to) shift = -h;
+      else if (to < d.from && j >= to && j < d.from) shift = h;
+      row.style.transform = shift ? `translateY(${shift}px)` : '';
+    });
+  };
+  const dragTick = (): void => {
+    const d = drag;
+    if (!d) return;
+    const rect = d.sc.getBoundingClientRect();
+    const edge = 48;
+    let v = 0;
+    if (d.clientY < rect.top + edge) v = -Math.ceil(((rect.top + edge - d.clientY) / edge) * 14);
+    else if (d.clientY > rect.bottom - edge) v = Math.ceil(((d.clientY - (rect.bottom - edge)) / edge) * 14);
+    if (v) {
+      d.sc.scrollTop += v;
+      dragApply(d);
+    }
+    d.raf = requestAnimationFrame(dragTick);
+  };
+  const dragEnd = (commit: boolean): void => {
+    const d = drag;
+    if (!d) return;
+    drag = null;
+    cancelAnimationFrame(d.raf);
+    dragStop = null;
+    if (commit && d.to !== d.from) {
+      moveStop(d.from, d.to);
+      renderSheet();
+      renderRoster();
+    } else {
+      d.rows.forEach((row) => {
+        row.style.transform = '';
+        row.classList.remove('lifted', 'dragging-row');
+      });
+      d.sc.classList.remove('dragging');
+    }
+    requestDraw();
+  };
+  sheetMsg.addEventListener('pointerdown', (e) => {
+    const grip = (e.target as HTMLElement).closest<HTMLElement>('[data-grip]');
+    if (!grip || !routing || routing.picking || drag) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const sc = sheetMsg.querySelector<HTMLElement>('.editor-scroll');
+    if (!sc) return;
+    e.preventDefault();
+    const rows = [...sc.querySelectorAll<HTMLElement>('.stoprow')];
+    const sr = sc.getBoundingClientRect();
+    const from = Number(grip.dataset.grip);
+    if (!rows[from]) return;
+    grip.setPointerCapture(e.pointerId);
+    drag = {
+      pid: e.pointerId,
+      from,
+      to: from,
+      startY: e.clientY,
+      clientY: e.clientY,
+      startScroll: sc.scrollTop,
+      sc,
+      rows,
+      centers: rows.map((row) => {
+        const b = row.getBoundingClientRect();
+        return b.top - sr.top + sc.scrollTop + b.height / 2;
+      }),
+      heights: rows.map((row) => row.offsetHeight),
+      raf: 0,
+    };
+    sc.classList.add('dragging');
+    rows[from].classList.add('lifted');
+    dragStop = from;
+    requestDraw();
+    drag.raf = requestAnimationFrame(dragTick);
+  });
+  sheetMsg.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.pid) return;
+    drag.clientY = e.clientY;
+    dragApply(drag);
+  });
+  sheetMsg.addEventListener('pointerup', (e) => {
+    if (drag && e.pointerId === drag.pid) dragEnd(true);
+  });
+  sheetMsg.addEventListener('pointercancel', (e) => {
+    if (drag && e.pointerId === drag.pid) dragEnd(false);
+  });
 
   function beginCars(train: Train): void {
     clearSelection();
@@ -1057,6 +1241,7 @@ function start(hotData: unknown): void {
         return o ? { ...o } : null;
       }),
       picking: train.route.length === 0,
+      picker: null,
       error: null,
     };
     renderSheet();
@@ -1133,7 +1318,6 @@ function start(hotData: unknown): void {
     const w = screenToWorld(sx, sy);
     const t = { x: Math.floor(w.x), y: Math.floor(w.y) };
     if (routing) {
-      if (!routing.picking) return;
       const st = stationNear(w.x, w.y);
       if (!st) {
         showToast('Tap a station to add it to the route.');
@@ -1147,7 +1331,13 @@ function start(hotData: unknown): void {
       routing.stops.push({ ...st.at });
       routing.orders.push(null);
       routing.error = null;
+      routing.picker = null;
       renderSheet();
+      renderRoster();
+      if (!routing.picking) {
+        const sc = sheetMsg.querySelector('.editor-scroll');
+        if (sc) sc.scrollTop = sc.scrollHeight;
+      }
       requestDraw();
       return;
     }
@@ -1523,11 +1713,13 @@ function start(hotData: unknown): void {
       const sy = oy + (c.y + 0.1) * z;
       const label = nums.join(',');
       const w = Math.max(24, 10 + label.length * 8);
-      ctx.fillStyle = !routing && train ? trainColour(train) : '#1f6f8b';
+      const hot = dragStop !== null && nums.includes(dragStop + 1);
+      ctx.fillStyle = hot ? '#e08a00' : !routing && train ? trainColour(train) : '#1f6f8b';
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = hot ? 3 : 2;
       ctx.beginPath();
-      ctx.roundRect(sx - w / 2, sy - 12, w, 24, 12);
+      if (hot) ctx.roundRect(sx - w / 2 - 3, sy - 15, w + 6, 30, 15);
+      else ctx.roundRect(sx - w / 2, sy - 12, w, 24, 12);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = '#ffffff';
