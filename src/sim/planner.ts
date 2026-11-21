@@ -1,7 +1,7 @@
 import { BRIDGE_SEGMENT_COST, MAX_BRIDGE_WATER_TILES } from './config';
 import type { GameMap } from './map';
 import { MinHeap } from './heap';
-import { DIRECTIONS } from './pathfinding';
+import { crossesTrack, joinsSmoothly, ringStep, smoothTurn } from './geometry';
 import type { TrackNetwork } from './track';
 import { coordKey, sameCoord, type Coord } from './types';
 
@@ -39,6 +39,8 @@ export interface PlannerContext {
 
 interface Edge {
   from: Coord;
+  /** Heading the route had when it reached `from`. */
+  fromH: number;
   /** Water tiles crossed by a bridge edge, in order. */
   via: Coord[];
   bridge: boolean;
@@ -56,38 +58,53 @@ export function planTrack(ctx: PlannerContext, from: Coord, to: Coord, opts: Pla
   const isWater = (c: Coord) => map.terrainAt(c) === 'water';
   if (isWater(from) || isWater(to)) return { ok: false, error: 'cannot build on water' };
 
-  // Priority = money first, then number of steps as a tie-breaker.
+  // Priority = money first, then number of steps as a tie-breaker. The state is
+  // (tile, heading) so that the route never turns more than 45° (see geometry.ts).
   const STEP_WEIGHT = 1 / 1024;
-  const best = new Map<string, number>([[coordKey(from), 0]]);
+  const START = 8;
+  const skey = (c: Coord, h: number) => `${coordKey(c)}|${h}`;
+  const best = new Map<string, number>([[skey(from, START), 0]]);
   const prev = new Map<string, Edge>();
-  const heap = new MinHeap<Coord>();
-  heap.push(0, from);
+  const heap = new MinHeap<{ at: Coord; h: number }>();
+  heap.push(0, { at: from, h: START });
+  let goal: { at: Coord; h: number } | null = null;
 
-  const relax = (c: Coord, n: Coord, key: number, edge: Edge) => {
-    const nk = coordKey(n);
+  const relax = (n: Coord, h: number, key: number, edge: Edge) => {
+    const nk = skey(n, h);
     if (key < (best.get(nk) ?? Infinity)) {
       best.set(nk, key);
       prev.set(nk, edge);
-      heap.push(key, n);
+      heap.push(key, { at: n, h });
     }
   };
+  /** New track leaving `from` or arriving at `to` must join the track already there smoothly. */
+  const endsOk = (c: Coord, n: Coord, isNew: boolean) =>
+    !isNew ||
+    ((!sameCoord(c, from) || joinsSmoothly(from, n, track.neighbors(from))) &&
+      (!sameCoord(n, to) || joinsSmoothly(to, c, track.neighbors(to))));
 
   while (heap.size > 0) {
-    const { key, value: c } = heap.pop()!;
-    if (key > (best.get(coordKey(c)) ?? Infinity)) continue;
-    if (sameCoord(c, to)) break;
+    const { key, value: s } = heap.pop()!;
+    const c = s.at;
+    if (key > (best.get(skey(c, s.h)) ?? Infinity)) continue;
+    if (sameCoord(c, to)) {
+      goal = s;
+      break;
+    }
 
-    for (const d of DIRECTIONS) {
+    for (let h = 0; h < 8; h++) {
+      if (s.h !== START && !smoothTurn(s.h, h)) continue;
+      const d = ringStep(h);
       const n = { x: c.x + d.x, y: c.y + d.y };
       if (!map.inBounds(n)) continue;
+      const edge = { from: c, fromH: s.h, via: [], bridge: false };
 
       // Ordinary step: existing track is free; new track only between land tiles.
       if (track.has(c, n)) {
-        relax(c, n, key + STEP_WEIGHT, { from: c, via: [], bridge: false });
-      } else if (!isWater(c) && !isWater(n)) {
+        relax(n, h, key + STEP_WEIGHT, edge);
+      } else if (!isWater(c) && !isWater(n) && !crossesTrack(track, c, n) && endsOk(c, n, true)) {
         const cost = ctx.segmentCost(c, n);
-        if (typeof cost === 'number')
-          relax(c, n, key + cost + STEP_WEIGHT, { from: c, via: [], bridge: false });
+        if (typeof cost === 'number') relax(n, h, key + cost + STEP_WEIGHT, edge);
       }
 
       // Bridge: straight over 1..MAX water tiles to the next land tile.
@@ -104,16 +121,22 @@ export function planTrack(ctx: PlannerContext, from: Coord, to: Coord, opts: Pla
         let cost = 0;
         for (let i = 1; i < tiles.length; i++)
           if (!track.has(tiles[i - 1]!, tiles[i]!)) cost += BRIDGE_SEGMENT_COST;
-        relax(c, t, key + cost + STEP_WEIGHT * (tiles.length - 1), { from: c, via: [...via], bridge: true });
+        if (endsOk(c, tiles[1]!, cost > 0) && endsOk(tiles[tiles.length - 2]!, t, cost > 0))
+          relax(t, h, key + cost + STEP_WEIGHT * (tiles.length - 1), {
+            from: c,
+            fromH: s.h,
+            via: [...via],
+            bridge: true,
+          });
         break;
       }
     }
   }
 
-  if (!prev.has(coordKey(to))) {
+  if (!goal) {
     return { ok: false, error: allowBridges ? 'no buildable route' : 'no route over land' };
   }
-  const route = traceRoute(track, prev, from, to);
+  const route = traceRoute(track, prev, from, goal);
   const price = priceRoute(ctx, route.path, route.bridgeSegments);
   if (typeof price === 'string') return { ok: false, error: price };
   return { ok: true, plan: { ...route, ...price } };
@@ -150,15 +173,15 @@ function traceRoute(
   track: TrackNetwork,
   prev: Map<string, Edge>,
   from: Coord,
-  to: Coord,
+  goal: { at: Coord; h: number },
 ): Pick<TrackPlan, 'path' | 'bridgeSegments' | 'bridges'> {
   // Walk back edge by edge, then reverse into tile order.
   const edges: { to: Coord; edge: Edge }[] = [];
-  let cur = to;
-  while (!sameCoord(cur, from)) {
-    const edge = prev.get(coordKey(cur))!;
-    edges.push({ to: cur, edge });
-    cur = edge.from;
+  let cur = goal;
+  while (!sameCoord(cur.at, from) || cur.h !== 8) {
+    const edge = prev.get(`${coordKey(cur.at)}|${cur.h}`)!;
+    edges.push({ to: cur.at, edge });
+    cur = { at: edge.from, h: edge.fromH };
   }
   edges.reverse();
 

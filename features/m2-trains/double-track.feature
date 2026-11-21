@@ -22,10 +22,10 @@ Feature: Double track
 
   Scenario: Doubling follows the existing track between the two tiles
     Given existing track from (2, 5) to (6, 5)
-    And existing track from (6, 5) to (6, 8)
-    When I double the track from (2, 5) to (6, 8)
-    Then it cost $70,000
-    And the track from (2, 5) to (6, 8) should be double
+    And existing track from (6, 5) to (9, 8)
+    When I double the track from (2, 5) to (9, 8)
+    Then it cost $85,000
+    And the track from (2, 5) to (9, 8) should be double
 
   Scenario: Only the single parts of a line are charged
     Given existing double track from (2, 5) to (4, 5)

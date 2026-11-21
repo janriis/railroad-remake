@@ -33,9 +33,9 @@ Feature: Block signalling
     And the following train should have left its first stop
 
   Scenario: Trains pass each other at a passing loop
-    Given existing track from (8, 5) to (8, 7)
-    And existing track from (8, 7) to (12, 7)
-    And existing track from (12, 7) to (12, 5)
+    Given existing track from (7, 5) to (9, 7)
+    And existing track from (9, 7) to (11, 7)
+    And existing track from (11, 7) to (13, 5)
     And a train exists at the station at (2, 5) with the route (2, 5), (18, 5)
     And a train exists at the station at (18, 5) with the route (18, 5), (2, 5)
     When 6 days pass

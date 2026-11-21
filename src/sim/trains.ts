@@ -1,4 +1,5 @@
 import { OPPOSING_TRAFFIC_PENALTY_TILES, TICKS_PER_DAY, TILE_UNITS } from './config';
+import { heading } from './geometry';
 import { findTrackPath, stepUnits } from './pathfinding';
 import type { Lot } from './cargo';
 import type { TrackNetwork } from './track';
@@ -162,10 +163,12 @@ function planPath(ctx: MovementContext, t: Train, dest: Coord): Coord[] | null {
   const penalty = OPPOSING_TRAFFIC_PENALTY_TILES * TILE_UNITS;
   const extraCost = (a: Coord, b: Coord) =>
     !ctx.track.isDouble(a, b) && opposing.has(`${coordKey(a)}>${coordKey(b)}`) ? penalty : 0;
-  return (
-    findTrackPath(ctx.track, t.at, dest, { extraCost, forbidFirst: t.prev }) ??
-    findTrackPath(ctx.track, t.at, dest, { extraCost })
-  );
+  // Carry on the way the train is facing; it may only reverse at a station (or if it has
+  // never moved, e.g. a train just placed on the line).
+  const facing = t.prev ? heading(t.prev, t.at) : null;
+  const ahead = findTrackPath(ctx.track, t.at, dest, { extraCost, heading: facing });
+  if (ahead || facing === null || !ctx.isStation(t.at)) return ahead;
+  return findTrackPath(ctx.track, t.at, dest, { extraCost });
 }
 
 /**

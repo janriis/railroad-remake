@@ -48,6 +48,7 @@ import {
 } from './economy';
 import { GameMap } from './map';
 import { generateWorld, newTown, type Town } from './mapgen';
+import { checkNewTrack } from './geometry';
 import { findTrackPath } from './pathfinding';
 import { planTrack, priceRoute, type PlanOptions, type PlanResult, type TrackPlan } from './planner';
 import { Rng } from './rng';
@@ -189,6 +190,8 @@ export class Game {
   buildTrack(path: readonly Coord[]): CommandResult {
     const quote = this.quoteTrack(path);
     if (!quote.ok) return quote;
+    const shape = checkNewTrack(this.track, pairs(path));
+    if (shape) return fail(shape);
     if (quote.cost > this.cash) return fail('insufficient funds');
     for (let i = 1; i < path.length; i++) {
       const [a, b] = [path[i - 1]!, path[i]!];
@@ -219,6 +222,8 @@ export class Game {
   buildBridge(from: Coord, to: Coord): CommandResult {
     const quote = this.quoteBridge(from, to);
     if (!quote.ok) return quote;
+    const shape = checkNewTrack(this.track, pairs(straightPath(from, to)!));
+    if (shape) return fail(shape);
     if (quote.cost > this.cash) return fail('insufficient funds');
     const path = straightPath(from, to)!;
     for (let i = 1; i < path.length; i++) {
@@ -242,6 +247,8 @@ export class Game {
     if (plan.bridges.length > 0 && !opts.confirmBridges) return fail('route needs a bridge');
     const price = priceRoute(this, plan.path, plan.bridgeSegments);
     if (typeof price === 'string') return fail(price);
+    const shape = checkNewTrack(this.track, pairs(plan.path));
+    if (shape) return fail(shape);
     if (price.cost > this.cash) return fail('insufficient funds');
     for (let i = 1; i < plan.path.length; i++) {
       const [a, b] = [plan.path[i - 1]!, plan.path[i]!];
@@ -825,3 +832,7 @@ function trimToCapacity(train: Train): void {
   }
   train.cargo = train.cargo.filter((l) => l.units > 0);
 }
+
+/** Consecutive tile pairs of a path. */
+const pairs = (path: readonly Coord[]): [Coord, Coord][] =>
+  path.slice(1).map((c, i) => [path[i]!, c] as [Coord, Coord]);

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { smoothAt } from '../../src/sim/geometry';
 import { Given, Then, When } from '@cucumber/cucumber';
 import type { TrackPlan } from '../../src/sim/planner';
 import { straightPath } from '../../src/sim/track';
@@ -87,4 +88,10 @@ Then('the planner should report {string}', function (this: SimWorld, error: stri
 
 Then('there is a bridge between {coord} and {coord}', function (this: SimWorld, a: Coord, b: Coord) {
   assert.equal(this.game.track.get(a, b)?.bridge, true);
+});
+
+Then('the suggested route should turn by at most 45 degrees at every tile', function (this: SimWorld) {
+  const path = plan(this).path;
+  for (let i = 2; i < path.length; i++)
+    assert.ok(smoothAt(path[i - 2]!, path[i - 1]!, path[i]!), `sharp turn at (${path[i - 1]!.x}, ${path[i - 1]!.y})`);
 });
