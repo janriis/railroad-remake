@@ -10,8 +10,17 @@ import {
   MAX_BRIDGE_WATER_TILES,
   MAX_CARS,
   PASSENGER_CAR_COST,
+  BREAD_GROWTH_RATE,
+  BUILDING,
+  BUILDING_REFUND_RATE,
+  BUILDING_SLOTS,
   CARGO,
   CAR_RUNNING_COST,
+  DEPOSIT_CAP_MONTHS,
+  SATURATED_PRICE_RATE,
+  SATURATION_LIMIT,
+  TOWN_DEMAND,
+  type BuildingKind,
   FREIGHT_CAR_CAPACITY,
   INDUSTRY,
   INHABITANTS_PER_MAILBAG,
@@ -77,8 +86,21 @@ export interface Station {
   readonly at: Coord;
   readonly size: StationSize;
   readonly radius: number;
-  /** Town cargo (passengers, mail) waiting to be picked up. */
+  /** Cargo waiting to be picked up: town passengers/mail and goods the town would not buy. */
   readonly waiting: WaitingLot[];
+  /** Buildings the player built here (M5). */
+  readonly buildings: StationBuilding[];
+}
+
+export interface StationBuilding {
+  readonly kind: BuildingKind;
+  /** Input received and not yet converted. */
+  input: number;
+  /** Input received over the building's life. */
+  received: number;
+  /** Output made at the last month end. */
+  lastMade: number;
+  madeThisYear: number;
 }
 
 export interface TrainOrder {
@@ -110,7 +132,14 @@ export interface SaveData {
     /** Tile it came from, so it keeps facing the same way after loading. */
     prev?: Coord | null;
   }[];
-  readonly towns?: { population: number; generatedThisYear: number; carriedThisYear: number }[];
+  readonly towns?: {
+    population: number;
+    generatedThisYear: number;
+    carriedThisYear: number;
+    soldThisMonth?: Town['soldThisMonth'];
+    breadThisYear?: number;
+  }[];
+  readonly stationBuildings?: StationBuilding[][];
   readonly stationWaiting?: WaitingLot[][];
   readonly industries?: Omit<Industry, 'id'>[];
 }
@@ -361,7 +390,14 @@ export class Game {
 
   /** Loading/fixture API: place a station without checks or cost. */
   addStation(size: StationSize, at: Coord): Station {
-    const station: Station = { id: this.nextId++, at, size, radius: STATION[size].radius, waiting: [] };
+    const station: Station = {
+      id: this.nextId++,
+      at,
+      size,
+      radius: STATION[size].radius,
+      waiting: [],
+      buildings: [],
+    };
     this.stations.set(coordKey(at), station);
     return station;
   }
@@ -546,9 +582,109 @@ export class Game {
   }
 
   accepts(station: Station, cargo: Cargo): boolean {
-    if (cargo === 'passengers' || cargo === 'mail')
-      return this.towns.some((t) => townTiles(t).some((tile) => this.inCatchment(station, tile.at)));
+    const town = this.servedTown(station);
+    if (cargo === 'passengers' || cargo === 'mail') return town !== null;
+    if (station.buildings.some((b) => BUILDING[b.kind].input === cargo)) return true;
+    if (town && TOWN_DEMAND[cargo]) return true;
     return this.industriesServedBy(station).some((i) => INDUSTRY[i.kind].input === cargo);
+  }
+
+  /** The town a station serves: the one with most of its footprint in the catchment, or null. */
+  servedTown(station: Station): Town | null {
+    let best: Town | null = null;
+    let bestTiles = 0;
+    for (const town of this.towns) {
+      const tiles = townTiles(town).filter((t) => this.inCatchment(station, t.at)).length;
+      if (tiles > bestTiles) [best, bestTiles] = [town, tiles];
+    }
+    return best;
+  }
+
+  /** What a town wants of a cargo per month (0 if it does not buy it). */
+  townDemand(town: Town, cargo: Cargo): number {
+    const d = TOWN_DEMAND[cargo];
+    return d ? Math.floor((town.population * d.perThousand) / 1000) : 0;
+  }
+
+  /**
+   * Sell goods to a town this month: full price up to demand, then a reduced price up to
+   * SATURATION_LIMIT x demand. Returns how many units it bought; the money is booked as goods sales.
+   */
+  private sellToTown(town: Town, cargo: Cargo, units: number, year = this.date.year): number {
+    const d = TOWN_DEMAND[cargo];
+    const demand = this.townDemand(town, cargo);
+    if (!d || demand === 0) return 0;
+    const tally = (town.soldThisMonth[cargo] ??= { units: 0, value: 0 });
+    const full = Math.max(0, Math.min(units, demand - tally.units));
+    const half = Math.max(0, Math.min(units - full, SATURATION_LIMIT * demand - tally.units - full));
+    const value = full * d.price + Math.round(half * d.price * SATURATED_PRICE_RATE);
+    tally.units += full + half;
+    tally.value += value;
+    if (cargo === 'loaves') town.breadThisYear += full;
+    this.spend(-value, 'goodsSales', year);
+    return full + half;
+  }
+
+  /**
+   * Cargo arrives at a station: the haul is paid, then a building here takes it as input, or the
+   * town buys it, or a covered industry takes it. Goods nobody takes now wait at the station.
+   * Trains call this when they unload; tests use it to stage a delivery.
+   */
+  deliverCargo(at: Coord, delivery: Delivery): CommandResult {
+    const station = this.stationAt(at);
+    if (!station) return fail('not a station');
+    const before = this.cash;
+    this.settleDelivery(delivery);
+    const { cargo, units } = delivery;
+    const building = station.buildings.find((b) => BUILDING[b.kind].input === cargo);
+    const town = this.servedTown(station);
+    const consumer = this.industriesServedBy(station).find((i) => INDUSTRY[i.kind].input === cargo);
+    if (building) {
+      building.input += units;
+      building.received += units;
+    } else if (town && TOWN_DEMAND[cargo]) {
+      addWaiting(station, cargo, 'delivery', units - this.sellToTown(town, cargo, units));
+    } else if (consumer) {
+      consumer.input += units;
+      consumer.received += units;
+    } else if (cargo !== 'passengers' && cargo !== 'mail') {
+      addWaiting(station, cargo, 'delivery', units);
+    }
+    return ok(before - this.cash);
+  }
+
+  /** Build a processing building inside a station that serves a town. */
+  buildStationBuilding(at: Coord, kind: BuildingKind): CommandResult {
+    const station = this.stationAt(at);
+    if (!station) return fail('not a station');
+    if (!this.servedTown(station)) return fail('station serves no town');
+    if (station.buildings.some((b) => b.kind === kind))
+      return fail(`station already has a ${kind.replaceAll('-', ' ')}`);
+    if (station.buildings.length >= BUILDING_SLOTS[station.size]) return fail('no free building slot');
+    const { cost } = BUILDING[kind];
+    if (cost > this.cash) return fail('insufficient funds');
+    this.addStationBuilding(station, kind);
+    this.spend(cost, 'construction');
+    return ok(cost);
+  }
+
+  /** Loading/fixture API: put a building in a station without checks or cost. */
+  addStationBuilding(station: Station, kind: BuildingKind): StationBuilding {
+    const b: StationBuilding = { kind, input: 0, received: 0, lastMade: 0, madeThisYear: 0 };
+    station.buildings.push(b);
+    return b;
+  }
+
+  /** Tear down a station building for a partial refund. Its unused input is lost. */
+  demolishStationBuilding(at: Coord, kind: BuildingKind): CommandResult {
+    const station = this.stationAt(at);
+    if (!station) return fail('not a station');
+    const i = station.buildings.findIndex((b) => b.kind === kind);
+    if (i < 0) return fail('no such building');
+    station.buildings.splice(i, 1);
+    const refund = Math.round(BUILDING[kind].cost * BUILDING_REFUND_RATE);
+    this.spend(-refund, 'construction');
+    return ok(-refund);
   }
 
   /** Get paid for a finished delivery. Trains call this when they unload; it never fails. */
@@ -599,12 +735,7 @@ export class Game {
     train.cargo = train.cargo.filter((lot) => {
       const distance = manhattan(lot.from, station.at);
       if (distance === 0 || !this.accepts(station, lot.cargo)) return true;
-      this.settleDelivery({ cargo: lot.cargo, units: lot.units, distance, days: days(lot) });
-      const consumer = this.industriesServedBy(station).find((i) => INDUSTRY[i.kind].input === lot.cargo);
-      if (consumer) {
-        consumer.input += lot.units;
-        consumer.received += lot.units;
-      }
+      this.deliverCargo(station.at, { cargo: lot.cargo, units: lot.units, distance, days: days(lot) });
       return false;
     });
   }
@@ -651,7 +782,7 @@ export class Game {
     for (const industry of this.industries) {
       const spec = INDUSTRY[industry.kind];
       if (spec.input === undefined) {
-        industry.stock += spec.perMonth;
+        industry.stock = Math.min(industry.stock + spec.perMonth, DEPOSIT_CAP_MONTHS * spec.perMonth);
       } else {
         const batches = Math.floor(industry.input / spec.in);
         industry.input -= batches * spec.in;
@@ -660,14 +791,44 @@ export class Game {
     }
   }
 
-  /** Year end: towns that saw at least half their passengers carried away grow. */
+  /**
+   * Month end for station buildings: convert input by ratio (leftovers wait), sell the output to the
+   * town, leave the rest at the station as cargo, and pay upkeep.
+   */
+  private runBuildings(year: number): void {
+    for (const station of this.stations.values()) {
+      const town = this.servedTown(station);
+      for (const b of station.buildings) {
+        const spec = BUILDING[b.kind];
+        const batches = Math.floor(b.input / spec.in);
+        b.input -= batches * spec.in;
+        const made = batches * spec.out;
+        b.lastMade = made;
+        b.madeThisYear += made;
+        const sold = town ? this.sellToTown(town, spec.output, made, year) : 0;
+        addWaiting(station, spec.output, b.kind, made - sold);
+        this.spend(spec.upkeep, 'buildingUpkeep', year);
+      }
+    }
+  }
+
+  /**
+   * Year end: towns that saw at least half their passengers carried away grow, and towns sold at
+   * least half their yearly bread demand at full price grow a little more.
+   */
   private growTowns(): void {
     for (const town of this.towns) {
+      let rate = 0;
       if (town.generatedThisYear > 0 && town.carriedThisYear * 2 >= town.generatedThisYear)
-        town.population = Math.round(town.population * (1 + TOWN_GROWTH_RATE));
+        rate += TOWN_GROWTH_RATE;
+      const breadDemand = 12 * this.townDemand(town, 'loaves');
+      if (breadDemand > 0 && town.breadThisYear * 2 >= breadDemand) rate += BREAD_GROWTH_RATE;
+      if (rate > 0) town.population = Math.round(town.population * (1 + rate));
       town.generatedThisYear = 0;
       town.carriedThisYear = 0;
+      town.breadThisYear = 0;
     }
+    for (const station of this.stations.values()) for (const b of station.buildings) b.madeThisYear = 0;
   }
 
   // --- Time --------------------------------------------------------------------
@@ -694,10 +855,12 @@ export class Game {
   /** Runs on the first hour of a new month and bills the month that just ended. Cash may go negative. */
   private endOfMonth(): void {
     const ended = dateAt(this.time - 1);
+    const year = ended.year;
     this.produceTownCargo();
     this.runIndustries();
+    this.runBuildings(year);
+    for (const town of this.towns) town.soldThisMonth = {};
     if (ended.month === 11) this.growTowns();
-    const year = ended.year;
     const costs = this.monthlyRunningCosts();
     this.spend(costs.trackMaintenance, 'trackMaintenance', year);
     this.spend(costs.trainRunning, 'trainRunning', year);
@@ -756,8 +919,11 @@ export class Game {
         population: t.population,
         generatedThisYear: t.generatedThisYear,
         carriedThisYear: t.carriedThisYear,
+        soldThisMonth: t.soldThisMonth,
+        breadThisYear: t.breadThisYear,
       })),
       stationWaiting: [...this.stations.values()].map((s) => s.waiting),
+      stationBuildings: [...this.stations.values()].map((s) => s.buildings),
       industries: this.industries.map((i) => ({
         kind: i.kind,
         at: i.at,
@@ -776,14 +942,16 @@ export class Game {
     for (const { year, ...page } of save.ledger ?? [])
       game.ledger.set(year, { ...emptyLedgerYear(), ...page });
     for (const s of save.segments) game.track.add(s.a, s.b, s.bridge, s.double ?? false);
-    save.towns?.forEach((t, i) => Object.assign(game.towns[i]!, t));
+    save.towns?.forEach((t, i) => Object.assign(game.towns[i]!, { soldThisMonth: {}, breadThisYear: 0 }, t));
     if (save.industries) {
       game.industries.length = 0;
       for (const i of save.industries) Object.assign(game.addIndustry(i.kind, i.at), i);
     }
-    save.stations.forEach((s, i) =>
-      game.addStation(s.size, s.at).waiting.push(...(save.stationWaiting?.[i] ?? [])),
-    );
+    save.stations.forEach((s, i) => {
+      const station = game.addStation(s.size, s.at);
+      station.waiting.push(...(save.stationWaiting?.[i] ?? []));
+      station.buildings.push(...(save.stationBuildings?.[i] ?? []));
+    });
     for (const t of save.trains) {
       const train = game.addTrain(t);
       train.route = t.route;

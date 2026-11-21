@@ -1,5 +1,12 @@
 import { defineParameterType } from '@cucumber/cucumber';
-import { CARGO_TYPES, INDUSTRY_KINDS, type Cargo, type IndustryKind } from '../../src/sim/config';
+import {
+  BUILDING_KINDS,
+  CARGO_TYPES,
+  INDUSTRY_KINDS,
+  type BuildingKind,
+  type Cargo,
+  type IndustryKind,
+} from '../../src/sim/config';
 import { TERRAINS, type Coord, type Terrain } from '../../src/sim/types';
 
 /** (3, 4) */
@@ -42,4 +49,18 @@ defineParameterType({
   name: 'cargo',
   regexp: new RegExp(['mailbags', ...CARGO_TYPES].join('|')),
   transformer: (s: string): Cargo => (s === 'mailbags' ? 'mail' : (s as Cargo)),
+});
+
+/** coal mine | timber camp | grain farm */
+defineParameterType({
+  name: 'deposit',
+  regexp: /coal mine|timber camp|grain farm/,
+  transformer: (s: string): IndustryKind => s.replace(' ', '-') as IndustryKind,
+});
+
+/** sawmill | furniture works | flour mill | bakery | coal yard */
+defineParameterType({
+  name: 'building',
+  regexp: new RegExp(BUILDING_KINDS.map((k) => k.replace('-', ' ')).join('|')),
+  transformer: (s: string): BuildingKind => s.replace(' ', '-') as BuildingKind,
 });

@@ -55,6 +55,8 @@ export const LEDGER_CATEGORIES = [
   'rollingStock',
   'trackMaintenance',
   'trainRunning',
+  'goodsSales',
+  'buildingUpkeep',
 ] as const;
 export type LedgerCategory = (typeof LEDGER_CATEGORIES)[number];
 
@@ -67,6 +69,8 @@ export const emptyLedgerYear = (): LedgerYear => ({
   rollingStock: 0,
   trackMaintenance: 0,
   trainRunning: 0,
+  goodsSales: 0,
+  buildingUpkeep: 0,
 });
 
 export const runningCosts = (y: LedgerYear): number => -(y.trackMaintenance + y.trainRunning);

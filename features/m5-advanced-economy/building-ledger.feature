@@ -1,10 +1,11 @@
-@m5 @wip
+@m5
 Feature: Building ledger
   As a railroad owner
   I want my buildings in the yearly ledger
   So that I can see whether they pay for themselves
 
-  Rules: the yearly ledger has two new categories, buildingSales (income) and buildingUpkeep (expense).
+  Rules: the yearly ledger has two new categories, goods sales (income from all sales to towns) and building
+  upkeep (expense).
   Buying a building counts as construction. Profit includes both.
 
   Background:

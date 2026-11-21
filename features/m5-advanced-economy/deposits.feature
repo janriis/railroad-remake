@@ -1,4 +1,4 @@
-@m5 @wip
+@m5
 Feature: Deposits
   As a railroad owner
   I want raw materials to come from deposits out in the country

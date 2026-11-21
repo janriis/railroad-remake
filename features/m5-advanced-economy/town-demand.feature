@@ -1,4 +1,4 @@
-@m5 @wip
+@m5
 Feature: Town demand
   As a railroad owner
   I want towns to buy the goods my buildings make
@@ -94,9 +94,8 @@ Feature: Town demand
     When 40 loaves are delivered to the station at (12, 5) over 10 tiles in 10 days
     Then the station at (12, 5) should have 40 loaves waiting
 
-  # Growth. Bread demand is "met" in a month when 40 loaves (Alder's demand) sold at full price.
-  # Assumed rule: the town grows when demand was met in at least half of the year's months.
-  # 1,000 x 1.05 = 1,050.
+  # Growth: a town sold at least half its yearly bread demand (12 x 40 = 480 loaves) at full price
+  # grows 5% more. 20 flour a month makes 40 loaves, all at full price: 480. 1,000 x 1.05 = 1,050.
   Scenario: A town fed with bread grows
     Given the station at (4, 5) has a bakery
     And the bakery in the station at (4, 5) is supplied with 20 flour every month

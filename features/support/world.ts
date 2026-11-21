@@ -1,4 +1,5 @@
 import { World, setWorldConstructor, type IWorldOptions } from '@cucumber/cucumber';
+import { TICKS_PER_MONTH } from '../../src/sim/economy';
 import { Game } from '../../src/sim/game';
 import type { PlanResult } from '../../src/sim/planner';
 import { TrackNetwork } from '../../src/sim/track';
@@ -23,6 +24,8 @@ export class SimWorld extends World {
   /** Rule breaches seen by the hour-by-hour monitor while time passed. */
   readonly violations: string[] = [];
   everDeadlocked = false;
+  /** Fixture deliveries made just before every month end. */
+  readonly monthlySupplies: (() => void)[] = [];
 
   constructor(options: IWorldOptions) {
     super(options);
@@ -52,6 +55,7 @@ export class SimWorld extends World {
   /** Advance time hour by hour, checking that trains never share a line of track or a plain tile. */
   passHours(hours: number): void {
     for (let h = 0; h < hours; h++) {
+      if ((this.game.time + 1) % TICKS_PER_MONTH === 0) for (const supply of this.monthlySupplies) supply();
       this.game.tick();
       const segments = new Map<string, number>();
       const tiles = new Map<string, number>();

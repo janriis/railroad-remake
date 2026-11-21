@@ -1,4 +1,12 @@
-import { INDUSTRY, INDUSTRY_KINDS, MAPGEN, TOWN_POPULATION, type IndustryKind } from './config';
+import {
+  INDUSTRY,
+  INDUSTRY_KINDS,
+  MAPGEN,
+  TOWN_POPULATION,
+  isDeposit,
+  type Cargo,
+  type IndustryKind,
+} from './config';
 import { GameMap } from './map';
 import { Rng } from './rng';
 import type { Coord } from './types';
@@ -9,6 +17,10 @@ export interface Town extends Coord {
   /** Passengers produced for the railroad and carried away so far this year (drives growth). */
   generatedThisYear: number;
   carriedThisYear: number;
+  /** Goods sold to the town this month (units and money), for demand saturation. */
+  soldThisMonth: Partial<Record<Cargo, { units: number; value: number }>>;
+  /** Loaves sold at full price this year (bread growth). */
+  breadThisYear: number;
 }
 
 export const newTown = (name: string, at: Coord, population: number): Town => ({
@@ -18,6 +30,8 @@ export const newTown = (name: string, at: Coord, population: number): Town => ({
   population,
   generatedThisYear: 0,
   carriedThisYear: 0,
+  soldThisMonth: {},
+  breadThisYear: 0,
 });
 
 export interface IndustrySite {
@@ -80,11 +94,12 @@ function placeIndustries(rng: Rng, map: GameMap, towns: readonly Town[]): Indust
   shuffle(rng, candidates);
   const taken: Coord[] = [...towns];
   const sites: IndustrySite[] = [];
-  for (const kind of INDUSTRY_KINDS) {
+  // Only deposits: processing happens in station buildings the player builds (M5).
+  for (const kind of INDUSTRY_KINDS.filter(isDeposit)) {
     let placed = 0;
     for (const c of candidates) {
       if (placed === perKind) break;
-      if (map.terrainAt(c) !== INDUSTRY[kind].terrain) continue;
+      if (!INDUSTRY[kind].terrains.includes(map.terrainAt(c))) continue;
       if (taken.some((t) => Math.max(Math.abs(t.x - c.x), Math.abs(t.y - c.y)) < MAPGEN.minIndustryDistance))
         continue;
       sites.push({ kind, at: c });

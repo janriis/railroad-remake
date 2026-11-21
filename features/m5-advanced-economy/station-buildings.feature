@@ -1,4 +1,4 @@
-@m5 @wip
+@m5
 Feature: Station buildings
   As a railroad owner
   I want to build workshops inside stations that serve a town
@@ -19,7 +19,7 @@ Feature: Station buildings
     And the town "Alder" with 1,000 inhabitants exists at (4, 5)
 
   Scenario Outline: Each building has a build cost
-    Given a large station exists at (4, 5) covering "Alder"
+    Given a large station exists at (4, 5) serving "Alder"
     When I build a <building> in the station at (4, 5)
     Then the command succeeds
     And it cost <cost>
@@ -35,27 +35,27 @@ Feature: Station buildings
 
   # The station at (12, 5) is 8 tiles from Alder's 5x5 footprint, so it covers no town tile.
   Scenario: A station that serves no town cannot hold buildings
-    Given a large station exists at (4, 5) covering "Alder"
+    Given a large station exists at (4, 5) serving "Alder"
     And a small station exists at (12, 5)
     When I build a bakery in the station at (12, 5)
     Then the command is rejected with "station serves no town"
     And no money was spent
 
   Scenario: Building needs a station
-    Given a large station exists at (4, 5) covering "Alder"
+    Given a large station exists at (4, 5) serving "Alder"
     When I build a bakery in the station at (8, 5)
     Then the command is rejected with "not a station"
     And no money was spent
 
   Scenario: Building needs enough cash
-    Given a large station exists at (4, 5) covering "Alder"
+    Given a large station exists at (4, 5) serving "Alder"
     And the company has $19,999 in cash
     When I build a bakery in the station at (4, 5)
     Then the command is rejected with "insufficient funds"
     And no money was spent
 
   Scenario: A small station has one slot
-    Given a small station exists at (4, 5) covering "Alder"
+    Given a small station exists at (4, 5) serving "Alder"
     And the station at (4, 5) is filled with 1 buildings
     When I build a coal yard in the station at (4, 5)
     Then the command is rejected with "no free building slot"
@@ -63,7 +63,7 @@ Feature: Station buildings
 
   # Filler buildings are taken in the order sawmill, flour mill, bakery; the extra building is a coal yard.
   Scenario Outline: A free slot accepts a building
-    Given a <size> station exists at (4, 5) covering "Alder"
+    Given a <size> station exists at (4, 5) serving "Alder"
     And the station at (4, 5) is filled with <filled> buildings
     When I build a coal yard in the station at (4, 5)
     Then the command succeeds
@@ -74,7 +74,7 @@ Feature: Station buildings
       | large  | 2      |
 
   Scenario Outline: A full station rejects more buildings
-    Given a <size> station exists at (4, 5) covering "Alder"
+    Given a <size> station exists at (4, 5) serving "Alder"
     And the station at (4, 5) is filled with <filled> buildings
     When I build a coal yard in the station at (4, 5)
     Then the command is rejected with "no free building slot"
@@ -86,7 +86,7 @@ Feature: Station buildings
       | large  | 3      |
 
   Scenario: Each kind can be built only once per station
-    Given a large station exists at (4, 5) covering "Alder"
+    Given a large station exists at (4, 5) serving "Alder"
     And the station at (4, 5) has a sawmill
     When I build a sawmill in the station at (4, 5)
     Then the command is rejected with "station already has a sawmill"
@@ -94,14 +94,14 @@ Feature: Station buildings
 
   # 25% of $30,000 = $7,500.
   Scenario: Demolishing a building refunds a quarter of its cost
-    Given a large station exists at (4, 5) covering "Alder"
+    Given a large station exists at (4, 5) serving "Alder"
     And the station at (4, 5) has a sawmill
     When I demolish the sawmill in the station at (4, 5)
     Then the company should have received a refund of $7,500
     And the station at (4, 5) should not contain a sawmill
 
   Scenario: A demolished building frees its slot
-    Given a small station exists at (4, 5) covering "Alder"
+    Given a small station exists at (4, 5) serving "Alder"
     And the station at (4, 5) has a sawmill
     When I demolish the sawmill in the station at (4, 5)
     And I build a bakery in the station at (4, 5)
@@ -109,7 +109,7 @@ Feature: Station buildings
 
   # Train carries timber from a timber camp at (12, 5) to Alder's station; the sawmill takes it as input.
   Scenario: Unloaded cargo goes into a building that takes it
-    Given a large station exists at (4, 5) covering "Alder"
+    Given a large station exists at (4, 5) serving "Alder"
     And the tile (12, 5) is forest
     And a timber camp exists at (12, 5)
     And a small station exists at (12, 5)
@@ -123,7 +123,7 @@ Feature: Station buildings
   # sawmill 41 timber -> 20 lumber, 1 left; furniture works 5 lumber -> 2 furniture, 1 left;
   # flour mill 10 grain -> 3 batches = 6 flour, 1 left; bakery 7 flour -> 14 loaves, 0 left.
   Scenario Outline: A building converts its input by its ratio and keeps the leftovers
-    Given a large station exists at (4, 5) covering "Alder"
+    Given a large station exists at (4, 5) serving "Alder"
     And the station at (4, 5) has a <building>
     And the <building> in the station at (4, 5) has received <input_amount> <input>
     When 1 months pass
@@ -138,7 +138,7 @@ Feature: Station buildings
       | bakery          | flour  | 7            | loaves    | 14            | 0    |
 
   Scenario: Leftover input is used the next month
-    Given a large station exists at (4, 5) covering "Alder"
+    Given a large station exists at (4, 5) serving "Alder"
     And the station at (4, 5) has a sawmill
     And the sawmill in the station at (4, 5) has received 1 timber
     When 1 months pass
@@ -148,7 +148,7 @@ Feature: Station buildings
 
   # Upkeep per month: sawmill 1,000, furniture works 1,500, flour mill 1,000, bakery 800, coal yard 300.
   Scenario Outline: Upkeep is charged every month even when the building is idle
-    Given a large station exists at (4, 5) covering "Alder"
+    Given a large station exists at (4, 5) serving "Alder"
     And the station at (4, 5) has a <building>
     When 1 months pass
     Then the ledger for 1850 should show <upkeep> in building upkeep
@@ -163,7 +163,7 @@ Feature: Station buildings
 
   # (1,000 + 800) x 3 months = $5,400.
   Scenario: Upkeep adds up over several buildings and months
-    Given a large station exists at (4, 5) covering "Alder"
+    Given a large station exists at (4, 5) serving "Alder"
     And the station at (4, 5) has a sawmill
     And the station at (4, 5) has a bakery
     When 3 months pass
@@ -171,7 +171,7 @@ Feature: Station buildings
 
   # Alder: lumber demand 10 per 1,000 inhabitants. 20 timber -> 10 lumber, all sold at $90 = $900.
   Scenario: Output is sold to the town first
-    Given a large station exists at (4, 5) covering "Alder"
+    Given a large station exists at (4, 5) serving "Alder"
     And the station at (4, 5) has a sawmill
     And the sawmill in the station at (4, 5) has received 20 timber
     When 1 months pass
@@ -181,7 +181,7 @@ Feature: Station buildings
   # 80 timber -> 40 lumber. Demand 10: 10 x $90 = $900; half-price band up to 20: 10 x $45 = $450;
   # above 2 x demand nothing sells, so 40 - 20 = 20 lumber wait. Sales $1,350.
   Scenario: Surplus output waits at the station as cargo
-    Given a large station exists at (4, 5) covering "Alder"
+    Given a large station exists at (4, 5) serving "Alder"
     And the station at (4, 5) has a sawmill
     And the sawmill in the station at (4, 5) has received 80 timber
     When 1 months pass
@@ -190,8 +190,19 @@ Feature: Station buildings
 
   # A coal yard sells what it takes straight to the town: 20 coal at $40 = $800 (demand 20).
   Scenario: A coal yard sells coal to the town
-    Given a large station exists at (4, 5) covering "Alder"
+    Given a large station exists at (4, 5) serving "Alder"
     And the station at (4, 5) has a coal yard
     And the coal yard in the station at (4, 5) has received 20 coal
     When 1 months pass
     Then the ledger for 1850 should show $800 in goods sales
+
+  # 80 timber -> 40 lumber; the town buys 20, 20 wait. A one-car train (20 units) calls within days.
+  Scenario: Trains pick up surplus goods from a station
+    Given a large station exists at (4, 5) serving "Alder"
+    And a small station exists at (12, 5)
+    And the station at (4, 5) has a sawmill
+    And the sawmill in the station at (4, 5) has received 80 timber
+    And a train with 1 freight cars exists at the station at (4, 5) with the route (4, 5), (12, 5)
+    When 1 months pass
+    And 5 days pass
+    Then the station at (4, 5) should have 0 lumber waiting

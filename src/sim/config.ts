@@ -84,6 +84,7 @@ export const CARGO_TYPES = [
   'grain',
   'flour',
   'loaves',
+  'coal',
 ] as const;
 export type Cargo = (typeof CARGO_TYPES)[number];
 
@@ -97,6 +98,7 @@ export const CARGO: Readonly<Record<Cargo, { rate: number; car: 'passenger' | 'f
   grain: { rate: 3, car: 'freight' },
   flour: { rate: 5, car: 'freight' },
   loaves: { rate: 9, car: 'freight' },
+  coal: { rate: 4, car: 'freight' },
 };
 
 /** Units one car holds (passengers and mail share passenger cars). */
@@ -124,24 +126,63 @@ export const INDUSTRY_KINDS = [
   'grain-farm',
   'flour-mill',
   'bakery',
+  'coal-mine',
 ] as const;
 export type IndustryKind = (typeof INDUSTRY_KINDS)[number];
 
 /**
- * Primary industries make `perMonth` of their output. Processors turn every `in` units
- * received into `out` units at month end; leftovers wait for next month.
+ * Deposits (no input) make `perMonth` of their output, and keep at most DEPOSIT_CAP_MONTHS of it.
+ * Processors turn every `in` units received into `out` units at month end; leftovers wait for next
+ * month. Since M5 map generation only places deposits; processors survive in older saves.
  */
 export const INDUSTRY: Readonly<
   Record<
     IndustryKind,
-    | { output: Cargo; perMonth: number; input?: undefined; terrain: 'forest' | 'plains' }
-    | { output: Cargo; input: Cargo; in: number; out: number; terrain: 'plains' }
+    | { output: Cargo; perMonth: number; input?: undefined; terrains: readonly Terrain[] }
+    | { output: Cargo; input: Cargo; in: number; out: number; terrains: readonly Terrain[] }
   >
 > = {
-  'timber-camp': { output: 'timber', perMonth: 40, terrain: 'forest' },
-  sawmill: { input: 'timber', in: 2, output: 'lumber', out: 1, terrain: 'plains' },
-  'furniture-works': { input: 'lumber', in: 2, output: 'furniture', out: 1, terrain: 'plains' },
-  'grain-farm': { output: 'grain', perMonth: 60, terrain: 'plains' },
-  'flour-mill': { input: 'grain', in: 3, output: 'flour', out: 2, terrain: 'plains' },
-  bakery: { input: 'flour', in: 1, output: 'loaves', out: 2, terrain: 'plains' },
+  'timber-camp': { output: 'timber', perMonth: 40, terrains: ['forest'] },
+  sawmill: { input: 'timber', in: 2, output: 'lumber', out: 1, terrains: ['plains'] },
+  'furniture-works': { input: 'lumber', in: 2, output: 'furniture', out: 1, terrains: ['plains'] },
+  'grain-farm': { output: 'grain', perMonth: 60, terrains: ['plains'] },
+  'flour-mill': { input: 'grain', in: 3, output: 'flour', out: 2, terrains: ['plains'] },
+  bakery: { input: 'flour', in: 1, output: 'loaves', out: 2, terrains: ['plains'] },
+  'coal-mine': { output: 'coal', perMonth: 40, terrains: ['hills', 'mountain'] },
 };
+
+export const isDeposit = (kind: IndustryKind): boolean => INDUSTRY[kind].input === undefined;
+/** A deposit's stock is capped at this many months of production; the rest is lost. */
+export const DEPOSIT_CAP_MONTHS = 6;
+
+// --- M5: station buildings and town demand ---------------------------------------
+
+export const BUILDING_KINDS = ['sawmill', 'furniture-works', 'flour-mill', 'bakery', 'coal-yard'] as const;
+export type BuildingKind = (typeof BUILDING_KINDS)[number];
+
+/** Built by the player inside a station that serves a town. Converts `in` input into `out` output. */
+export const BUILDING: Readonly<
+  Record<BuildingKind, { input: Cargo; output: Cargo; in: number; out: number; cost: number; upkeep: number }>
+> = {
+  sawmill: { input: 'timber', output: 'lumber', in: 2, out: 1, cost: 30_000, upkeep: 1_000 },
+  'furniture-works': { input: 'lumber', output: 'furniture', in: 2, out: 1, cost: 45_000, upkeep: 1_500 },
+  'flour-mill': { input: 'grain', output: 'flour', in: 3, out: 2, cost: 30_000, upkeep: 1_000 },
+  bakery: { input: 'flour', output: 'loaves', in: 1, out: 2, cost: 20_000, upkeep: 800 },
+  'coal-yard': { input: 'coal', output: 'coal', in: 1, out: 1, cost: 10_000, upkeep: 300 },
+};
+
+export const BUILDING_SLOTS: Readonly<Record<StationSize, number>> = { small: 1, medium: 2, large: 3 };
+export const BUILDING_REFUND_RATE = 0.25;
+
+/** What a town buys each month per 1,000 inhabitants, and the full price per unit. */
+export const TOWN_DEMAND: Readonly<Partial<Record<Cargo, { perThousand: number; price: number }>>> = {
+  loaves: { perThousand: 40, price: 60 },
+  furniture: { perThousand: 5, price: 400 },
+  coal: { perThousand: 20, price: 40 },
+  lumber: { perThousand: 10, price: 90 },
+};
+/** Above demand a town pays this share of the price, up to this many times demand; then nothing. */
+export const SATURATED_PRICE_RATE = 0.5;
+export const SATURATION_LIMIT = 2;
+/** Extra yearly growth for a town sold at least half its yearly bread demand at full price. */
+export const BREAD_GROWTH_RATE = 0.05;
