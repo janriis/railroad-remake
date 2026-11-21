@@ -1,4 +1,4 @@
-@m3 @wip
+@m3
 Feature: Running costs
   As a railroad owner
   I want track and trains to cost money to keep running

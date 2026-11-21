@@ -44,11 +44,13 @@ describe('save and load', () => {
     const bought = game.buyTrain({ at: a!, locomotive: true, passengerCars: 2 });
     expect(bought.ok).toBe(true);
     if (bought.ok) expect(game.setRoute(bought.train.id, [a!, b!]).ok).toBe(true);
-    game.advanceDays(2);
+    game.advanceDays(31); // past a month-end, so running costs are booked
 
     const save = JSON.parse(JSON.stringify(game.toSave()));
     const loaded = Game.fromSave(save);
     expect(JSON.stringify(loaded.toSave())).toBe(JSON.stringify(game.toSave()));
     expect(loaded.trains[0]!.route).toHaveLength(2);
+    expect(loaded.ledgerFor(1850)).toEqual(game.ledgerFor(1850));
+    expect(game.ledgerFor(1850).trainRunning).toBe(-2_400);
   });
 });

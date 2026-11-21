@@ -257,13 +257,11 @@ function start(hotData: unknown): void {
   let lastDate = '';
 
   function dateText(): string {
-    const day = Math.floor(game.time / TICKS_PER_DAY);
-    const year = 1850 + Math.floor(day / 360);
-    const month = Math.floor((day % 360) / 30);
-    return `${(day % 30) + 1} ${MONTHS[month]} ${year}`;
+    const { day, month, year } = game.date;
+    return `${day} ${MONTHS[month]} ${year}`;
   }
   function updateHud(): void {
-    const cash = '$' + Math.round(game.cash).toLocaleString('en-US');
+    const cash = (game.cash < 0 ? '−' : '') + money(game.cash);
     if (cash !== lastCash) {
       lastCash = cash;
       $('cash').textContent = cash;

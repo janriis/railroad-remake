@@ -58,5 +58,13 @@ export const TICKS_PER_DAY = 24;
 export const TILE_UNITS = 48;
 export const DIAGONAL_UNITS = 72;
 export const LOCOMOTIVE_TILES_PER_DAY = 4;
+
+// --- M3: economy ----------------------------------------------------------------
+
+export const START_YEAR = 1850;
+/** Charged at the end of every month. */
+export const TRACK_MAINTENANCE_PER_SEGMENT = 100;
+export const LOCOMOTIVE_RUNNING_COST = 2_000;
+export const CAR_RUNNING_COST = 200;
 /** Routing penalty (in tiles) for each segment another train plans to run the opposite way. */
 export const OPPOSING_TRAFFIC_PENALTY_TILES = 4;

@@ -10,12 +10,23 @@ import {
   MAX_BRIDGE_WATER_TILES,
   MAX_CARS,
   PASSENGER_CAR_COST,
+  CAR_RUNNING_COST,
+  LOCOMOTIVE_RUNNING_COST,
   STATION,
   TICKS_PER_DAY,
+  TRACK_MAINTENANCE_PER_SEGMENT,
   TILE_UNITS,
   TRACK_COST,
   type StationSize,
 } from './config';
+import {
+  TICKS_PER_MONTH,
+  dateAt,
+  emptyLedgerYear,
+  type GameDate,
+  type LedgerCategory,
+  type LedgerYear,
+} from './economy';
 import { GameMap } from './map';
 import { generateWorld, type Town } from './mapgen';
 import { findTrackPath } from './pathfinding';
@@ -60,6 +71,7 @@ export interface SaveData {
   readonly gen: GenerateOptions;
   readonly cash: number;
   readonly time: number;
+  readonly ledger?: ({ year: number } & Partial<LedgerYear>)[];
   readonly segments: { a: Coord; b: Coord; bridge: boolean }[];
   readonly stations: { at: Coord; size: StationSize }[];
   readonly trains: {
@@ -88,6 +100,8 @@ export class Game {
   cash: number;
   /** Game hours since the start. */
   time = 0;
+  /** Yearly accounts, keyed by year. */
+  readonly ledger = new Map<number, LedgerYear>();
   private nextId = 1;
 
   private constructor(
@@ -148,7 +162,7 @@ export class Game {
       const [a, b] = [path[i - 1]!, path[i]!];
       if (!this.track.has(a, b)) this.track.add(a, b);
     }
-    this.cash -= quote.cost;
+    this.spend(quote.cost, 'construction');
     return quote;
   }
 
@@ -179,7 +193,7 @@ export class Game {
       const [a, b] = [path[i - 1]!, path[i]!];
       if (!this.track.has(a, b)) this.track.add(a, b, true);
     }
-    this.cash -= quote.cost;
+    this.spend(quote.cost, 'construction');
     return quote;
   }
 
@@ -201,7 +215,7 @@ export class Game {
       const [a, b] = [plan.path[i - 1]!, plan.path[i]!];
       if (!this.track.has(a, b)) this.track.add(a, b, plan.bridgeSegments[i - 1]!);
     }
-    this.cash -= price.cost;
+    this.spend(price.cost, 'construction');
     return ok(price.cost);
   }
 
@@ -235,7 +249,7 @@ export class Game {
       return fail('train on track');
     const refund = existing.reduce((sum, [a, b]) => sum + this.demolishRefund(a, b), 0);
     for (const [a, b] of existing) this.track.remove(a, b);
-    this.cash += refund;
+    this.spend(-refund, 'construction');
     return ok(-refund);
   }
 
@@ -260,7 +274,7 @@ export class Game {
     const { cost } = STATION[size];
     if (cost > this.cash) return fail('insufficient funds');
     this.addStation(size, at);
-    this.cash -= cost;
+    this.spend(cost, 'construction');
     return ok(cost);
   }
 
@@ -289,7 +303,7 @@ export class Game {
     const cost = this.trainPrice(order);
     if (cost > this.cash) return fail('insufficient funds');
     const train = this.addTrain({ ...order });
-    this.cash -= cost;
+    this.spend(cost, 'rollingStock');
     return { ok: true, cost, train };
   }
 
@@ -379,7 +393,7 @@ export class Game {
     train.stopOrders = train.stopOrders.map((o) =>
       o && o.passengerCars + o.freightCars === owned ? o : null,
     );
-    this.cash -= cost;
+    this.spend(cost, 'rollingStock');
     return ok(cost);
   }
 
@@ -388,6 +402,43 @@ export class Game {
   tick(): void {
     this.time++;
     advanceTrains(this);
+    if (this.time % TICKS_PER_MONTH === 0) this.endOfMonth();
+  }
+
+  get date(): GameDate {
+    return dateAt(this.time);
+  }
+
+  /** What next month-end will charge, by category. */
+  monthlyRunningCosts(): { trackMaintenance: number; trainRunning: number } {
+    const cars = this.trains.reduce((n, t) => n + t.passengerCars + t.freightCars, 0);
+    return {
+      trackMaintenance: this.track.segmentCount * TRACK_MAINTENANCE_PER_SEGMENT,
+      trainRunning: this.trains.length * LOCOMOTIVE_RUNNING_COST + cars * CAR_RUNNING_COST,
+    };
+  }
+
+  /** Runs on the first hour of a new month and bills the month that just ended. Cash may go negative. */
+  private endOfMonth(): void {
+    const year = dateAt(this.time - 1).year;
+    const costs = this.monthlyRunningCosts();
+    this.spend(costs.trackMaintenance, 'trackMaintenance', year);
+    this.spend(costs.trainRunning, 'trainRunning', year);
+  }
+
+  // --- Money -------------------------------------------------------------------
+
+  ledgerFor(year: number): LedgerYear {
+    let page = this.ledger.get(year);
+    if (!page) this.ledger.set(year, (page = emptyLedgerYear()));
+    return page;
+  }
+
+  /** The one place cash changes: takes `amount` (negative = income) and books it. */
+  private spend(amount: number, category: LedgerCategory, year = this.date.year): void {
+    if (amount === 0) return;
+    this.cash -= amount;
+    this.ledgerFor(year)[category] -= amount;
   }
 
   advanceDays(days: number): void {
@@ -403,6 +454,7 @@ export class Game {
       gen: this.gen,
       cash: this.cash,
       time: this.time,
+      ledger: [...this.ledger].map(([year, page]) => ({ year, ...page })),
       segments: [...this.track.segments()].map((s) => ({ a: s.a, b: s.b, bridge: s.bridge })),
       stations: [...this.stations.values()].map((s) => ({ at: s.at, size: s.size })),
       trains: this.trains.map((t) => ({
@@ -422,6 +474,7 @@ export class Game {
     const game = Game.generate(save.gen);
     game.cash = save.cash;
     game.time = save.time;
+    for (const { year, ...page } of save.ledger ?? []) game.ledger.set(year, { ...emptyLedgerYear(), ...page });
     for (const s of save.segments) game.track.add(s.a, s.b, s.bridge);
     for (const s of save.stations) game.addStation(s.size, s.at);
     for (const t of save.trains) {
