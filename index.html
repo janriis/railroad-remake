@@ -76,6 +76,27 @@
       <div id="sheet" class="sheet hidden">
         <div id="sheet-msg" class="sheet-msg"></div>
       </div>
+      <section id="roster" class="roster" aria-label="Train roster">
+        <div class="roster-head">
+          <h2 id="roster-title">Trains (0)</h2>
+          <button
+            id="roster-toggle"
+            class="roster-toggle"
+            type="button"
+            aria-expanded="true"
+            aria-controls="roster-list"
+            aria-label="Collapse train list"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z" /></svg>
+          </button>
+        </div>
+        <div id="roster-list" class="roster-list">
+          <p id="roster-empty" class="roster-empty">
+            No trains yet. Use the Train tool on a station to buy one.
+          </p>
+          <div id="roster-rows"></div>
+        </div>
+      </section>
       <nav id="toolbar" aria-label="Tools">
         <button class="tool active" data-tool="pan" type="button">
           <svg viewBox="0 0 24 24" aria-hidden="true">

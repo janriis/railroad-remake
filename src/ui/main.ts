@@ -3,6 +3,7 @@ import { Game, type SaveData, type Station } from '../sim/game';
 import type { TrackPlan } from '../sim/planner';
 import type { Train } from '../sim/trains';
 import { straightPath, type Segment } from '../sim/track';
+import { findTrackPath } from '../sim/pathfinding';
 import { sameCoord, type Coord } from '../sim/types';
 import {
   TRAIN_COLOURS,
@@ -54,6 +55,9 @@ const MAP_SIZE = 64;
 const SAVE_KEY = 'railroadsim.save.v2';
 const TAP_SLOP = 8;
 const TICK_MS = 2000 / TICKS_PER_DAY;
+const ROSTER_KEY = 'railroadsim.roster.collapsed';
+const ROSTER_MS = 250;
+const CAM_MS = 450;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -118,6 +122,7 @@ function start(hotData: unknown): void {
   let game: Game;
   let terrain: HTMLCanvasElement;
   let segs: Segment[] = [];
+  let trackVersion = 0;
 
   const cam = { x: 0, y: 0, zoom: 24 };
   let viewW = 0;
@@ -164,6 +169,7 @@ function start(hotData: unknown): void {
   // ---------- game lifecycle ----------
   const refreshSegs = (): void => {
     segs = [...game.track.segments()];
+    trackVersion++;
   };
   const centreOnFirstTown = (): void => {
     const t = game.towns[0];
@@ -286,6 +292,167 @@ function start(hotData: unknown): void {
   function routeList(stops: Coord[]): string {
     return stops.map((c, i) => `${i + 1}. ${stationNameAt(c)}`).join(' → ');
   }
+
+  // ---------- train roster ----------
+  const rosterEl = $('roster');
+  const rosterTitle = $('roster-title');
+  const rosterToggle = $<HTMLButtonElement>('roster-toggle');
+  const rosterEmpty = $('roster-empty');
+  const rosterRows = $('roster-rows');
+  const LOCO_SVG =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a2 2 0 012 2v10a3 3 0 01-3 3l2 3h-2.5l-2-3h-5l-2 3H5l2-3a3 3 0 01-3-3V5a2 2 0 012-2zm0 3v5h12V6zm2 8a1.3 1.3 0 100 2.6A1.3 1.3 0 008 14zm8 0a1.3 1.3 0 100 2.6 1.3 1.3 0 000-2.6z" /></svg>';
+
+  interface RosterRow {
+    el: HTMLButtonElement;
+    swatch: HTMLElement;
+    name: HTMLElement;
+    consistText: HTMLElement;
+    consistSr: HTMLElement;
+    chip: HTMLElement;
+    route: HTMLElement;
+    routeKey: string;
+  }
+  const rosterRowMap = new Map<number, RosterRow>();
+  let lastRosterAt = 0;
+
+  const setText = (el: HTMLElement, text: string): void => {
+    if (el.textContent !== text) el.textContent = text;
+  };
+
+  function chipFor(t: Train): { text: string; cls: string } {
+    if (t.route.length < 2) return { text: 'No route', cls: 'none' };
+    if (t.deadlocked) return { text: 'Stuck', cls: 'stuck' };
+    if (t.status === 'waiting') return { text: 'Waiting', cls: 'waiting' };
+    if (t.status === 'at-stop') return { text: 'At station', cls: 'station' };
+    if (t.status === 'moving') return { text: 'Running', cls: 'running' };
+    return t.next ? { text: 'Running', cls: 'running' } : { text: 'At station', cls: 'station' };
+  }
+
+  function makeRosterRow(id: number): RosterRow {
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'train-row';
+    el.dataset.train = String(id);
+    el.innerHTML =
+      '<span class="swatch" aria-hidden="true"></span><span class="body">' +
+      '<span class="line1"><span class="tname"></span>' +
+      `<span class="consist">${LOCO_SVG}<span class="ctext" aria-hidden="true"></span><span class="sr csr"></span></span>` +
+      '<span class="status"></span></span><span class="route"></span></span>';
+    const q = (sel: string) => el.querySelector<HTMLElement>(sel)!;
+    return {
+      el,
+      swatch: q('.swatch'),
+      name: q('.tname'),
+      consistText: q('.ctext'),
+      consistSr: q('.csr'),
+      chip: q('.status'),
+      route: q('.route'),
+      routeKey: '\u0000',
+    };
+  }
+
+  function updateRosterRoute(row: RosterRow, t: Train): void {
+    const names = t.route.map(stationNameAt);
+    const key = `${names.join('|')}#${t.target}`;
+    if (key === row.routeKey) return;
+    row.routeKey = key;
+    row.route.replaceChildren();
+    if (names.length < 2) {
+      row.route.textContent = 'No route yet. Tap to choose stops.';
+      row.route.removeAttribute('title');
+      return;
+    }
+    row.route.title = names.join(' → ') + ', then repeats';
+    names.forEach((n, i) => {
+      if (i > 0) row.route.append(' → ');
+      const span = document.createElement('span');
+      span.className = i === t.target ? 'stop next' : 'stop';
+      span.textContent = i === t.target ? `▸ ${n}` : n;
+      row.route.append(span);
+    });
+    const loop = document.createElement('span');
+    loop.setAttribute('aria-hidden', 'true');
+    loop.textContent = ' ↺';
+    row.route.append(loop);
+  }
+
+  function renderRoster(): void {
+    if (!game) return;
+    lastRosterAt = performance.now();
+    const trains = game.trains;
+    setText(rosterTitle, `Trains (${trains.length})`);
+    rosterEmpty.hidden = trains.length > 0;
+    const live = new Set(trains.map((t) => t.id));
+    for (const [id, row] of rosterRowMap)
+      if (!live.has(id)) {
+        row.el.remove();
+        rosterRowMap.delete(id);
+      }
+    trains.forEach((t, i) => {
+      let row = rosterRowMap.get(t.id);
+      if (!row) {
+        row = makeRosterRow(t.id);
+        rosterRowMap.set(t.id, row);
+      }
+      if (rosterRows.children[i] !== row.el) rosterRows.insertBefore(row.el, rosterRows.children[i] ?? null);
+      const name = trainName(t);
+      setText(row.name, name);
+      row.swatch.style.backgroundColor = trainColour(t);
+      const cars = [t.passengerCars ? `${t.passengerCars}P` : '', t.freightCars ? `${t.freightCars}F` : '']
+        .filter(Boolean)
+        .join(' ');
+      setText(row.consistText, cars || 'loco');
+      setText(
+        row.consistSr,
+        `Locomotive, ${plural(t.passengerCars, 'passenger car')}, ${plural(t.freightCars, 'freight car')}`,
+      );
+      const chip = chipFor(t);
+      setText(row.chip, chip.text);
+      const cls = `status ${chip.cls}`;
+      if (row.chip.className !== cls) row.chip.className = cls;
+      updateRosterRoute(row, t);
+      if (t.id === selTrainId) row.el.setAttribute('aria-current', 'true');
+      else row.el.removeAttribute('aria-current');
+    });
+  }
+
+  let rosterCollapsed = false;
+  try {
+    rosterCollapsed = localStorage.getItem(ROSTER_KEY) === '1';
+  } catch {
+    /* storage unavailable: start expanded */
+  }
+  function applyRosterCollapsed(): void {
+    rosterEl.classList.toggle('collapsed', rosterCollapsed);
+    rosterToggle.setAttribute('aria-expanded', String(!rosterCollapsed));
+    rosterToggle.setAttribute('aria-label', rosterCollapsed ? 'Expand train list' : 'Collapse train list');
+  }
+  applyRosterCollapsed();
+  rosterToggle.addEventListener('click', () => {
+    rosterCollapsed = !rosterCollapsed;
+    applyRosterCollapsed();
+    try {
+      localStorage.setItem(ROSTER_KEY, rosterCollapsed ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  });
+  rosterRows.addEventListener('click', (e) => {
+    const el = (e.target as HTMLElement).closest<HTMLElement>('[data-train]');
+    if (!el) return;
+    const train = game.train(Number(el.dataset.train));
+    if (!train) return;
+    if (routing) {
+      showToast('Finish picking the route first.');
+      return;
+    }
+    setTool('pan');
+    selTrainId = train.id;
+    renderSheet();
+    renderRoster();
+    panToTrain(train);
+    requestDraw();
+  });
 
   function renderSheet(): void {
     if (routing) {
@@ -484,6 +651,7 @@ function start(hotData: unknown): void {
     selTrainId = null;
     selStation = null;
     renderSheet();
+    renderRoster();
     requestDraw();
   }
   function setTool(t: Tool): void {
@@ -641,6 +809,7 @@ function start(hotData: unknown): void {
       return;
     }
     persist();
+    renderRoster();
     showToast(`Bought a train for ${money(r.cost)}. Now pick its route.`);
     buy = null;
     beginRouting(r.train);
@@ -661,6 +830,7 @@ function start(hotData: unknown): void {
   function cancelRouting(): void {
     routing = null;
     renderSheet();
+    renderRoster();
     requestDraw();
   }
   function undoStop(): void {
@@ -682,6 +852,7 @@ function start(hotData: unknown): void {
     routing = null;
     showToast('Route set. The train is on its way.');
     renderSheet();
+    renderRoster();
     requestDraw();
   }
 
@@ -825,6 +996,41 @@ function start(hotData: unknown): void {
     requestDraw();
   }
 
+  // ---------- camera animation ----------
+  const wideLayout = window.matchMedia('(min-width: 720px)');
+  let camAnim: { x0: number; y0: number; z0: number; x1: number; y1: number; z1: number; t0: number } | null =
+    null;
+  function panToTrain(t: Train): void {
+    const head = trainPoses(t, 0)[0]!;
+    const z1 = clampZoom(Math.max(cam.zoom, 18));
+    // The side panel covers the right of the screen on wide layouts: centre in what is left.
+    const shift = wideLayout.matches ? 156 / z1 : 0;
+    const keep = { ...cam };
+    cam.zoom = z1;
+    cam.x = head.x + shift;
+    cam.y = head.y;
+    clampCam();
+    const to = { ...cam };
+    Object.assign(cam, keep);
+    if (reducedMotion) {
+      Object.assign(cam, to);
+      camAnim = null;
+    } else {
+      camAnim = { x0: cam.x, y0: cam.y, z0: cam.zoom, x1: to.x, y1: to.y, z1, t0: performance.now() };
+    }
+    requestDraw();
+  }
+  function stepCamAnim(now: number): boolean {
+    if (!camAnim) return false;
+    const k = Math.min(1, (now - camAnim.t0) / CAM_MS);
+    const e = 1 - Math.pow(1 - k, 3);
+    cam.zoom = camAnim.z0 + (camAnim.z1 - camAnim.z0) * e;
+    cam.x = camAnim.x0 + (camAnim.x1 - camAnim.x0) * e;
+    cam.y = camAnim.y0 + (camAnim.y1 - camAnim.y0) * e;
+    if (k >= 1) camAnim = null;
+    return true;
+  }
+
   // ---------- pointer input ----------
   const pointers = new Map<number, { x: number; y: number }>();
   let tap: { id: number; x: number; y: number; ok: boolean } | null = null;
@@ -845,6 +1051,7 @@ function start(hotData: unknown): void {
   };
 
   canvas.addEventListener('pointerdown', (e) => {
+    camAnim = null;
     canvas.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, rel(e));
     if (pointers.size === 1) {
@@ -904,6 +1111,7 @@ function start(hotData: unknown): void {
     'wheel',
     (e) => {
       e.preventDefault();
+      camAnim = null;
       const p = rel(e);
       zoomAt(p.x, p.y, Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015)));
     },
@@ -956,6 +1164,7 @@ function start(hotData: unknown): void {
 
     for (const t of game.towns) drawTownBuildings(ctx, t);
     drawTrack(ctx, segs);
+    drawRouteLegs(z);
     drawCatchments();
     drawSelection(z);
     for (const s of game.stations.values()) drawStation(ctx, s);
@@ -965,6 +1174,52 @@ function start(hotData: unknown): void {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     for (const t of game.towns) drawLabel(ctx, t.name, ox + (t.x + 0.5) * z, oy + t.y * z - 2);
     drawRouteMarkers(ox, oy, z);
+  }
+
+  // ---------- selected train's route on the map ----------
+  let legCache: { key: string; segs: [Coord, Coord][] } | null = null;
+  function routeLegs(t: Train): [Coord, Coord][] {
+    const key = `${t.id}|${trackVersion}|${t.route.map((c) => `${c.x},${c.y}`).join(';')}`;
+    if (legCache?.key === key) return legCache.segs;
+    const out: [Coord, Coord][] = [];
+    const seen = new Set<string>();
+    const n = t.route.length;
+    if (n >= 2) {
+      for (let i = 0; i < n; i++) {
+        const path = findTrackPath(game.track, t.route[i]!, t.route[(i + 1) % n]!);
+        if (!path) continue;
+        for (let j = 1; j < path.length; j++) {
+          const a = path[j - 1]!;
+          const b = path[j]!;
+          const k1 = `${a.x},${a.y}-${b.x},${b.y}`;
+          const k2 = `${b.x},${b.y}-${a.x},${a.y}`;
+          if (seen.has(k1) || seen.has(k2)) continue;
+          seen.add(k1);
+          out.push([a, b]);
+        }
+      }
+    }
+    legCache = { key, segs: out };
+    return out;
+  }
+  function drawRouteLegs(z: number): void {
+    const t = routing ? undefined : selectedTrain();
+    if (!t || t.route.length < 2) return;
+    const legs = routeLegs(t);
+    if (!legs.length) return;
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = trainColour(t);
+    ctx.lineWidth = Math.max(0.42, 7 / z);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (const [a, b] of legs) {
+      ctx.moveTo(a.x + 0.5, a.y + 0.5);
+      ctx.lineTo(b.x + 0.5, b.y + 0.5);
+    }
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawCatchments(): void {
@@ -1022,7 +1277,7 @@ function start(hotData: unknown): void {
       const sy = oy + (c.y + 0.1) * z;
       const label = nums.join(',');
       const w = Math.max(24, 10 + label.length * 8);
-      ctx.fillStyle = '#1f6f8b';
+      ctx.fillStyle = !routing && train ? trainColour(train) : '#1f6f8b';
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -1030,6 +1285,9 @@ function start(hotData: unknown): void {
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+      ctx.strokeText(label, sx, sy + 0.5);
       ctx.fillText(label, sx, sy + 0.5);
     }
   }
@@ -1158,6 +1416,9 @@ function start(hotData: unknown): void {
     requestAnimationFrame(frame);
     const dt = Math.min(now - lastFrame, 250);
     lastFrame = now;
+    const animating = stepCamAnim(now);
+    if (now - lastRosterAt >= ROSTER_MS) renderRoster();
+    if (animating && paused) draw(now);
     if (!paused) {
       acc += dt * speed;
       const ticked = Math.min(Math.floor(acc / TICK_MS), 48);
@@ -1248,6 +1509,13 @@ function start(hotData: unknown): void {
       },
       get speed() {
         return speed;
+      },
+      /** Re-reads the game state into the UI (for tests that change `game` directly). */
+      refresh() {
+        refreshSegs();
+        updateHud();
+        renderRoster();
+        requestDraw();
       },
       setView(x: number, y: number, zoom: number) {
         cam.x = x;
