@@ -70,3 +70,20 @@ mountain $60,000, diagonal x1.5.
 
 - Start date 1 January 1850; year = 12 months x 30 days = 360 days.
 - Ledger categories: cargo income, construction expenses, running costs, profit/loss.
+
+## Decided while implementing M3 (lead)
+
+- Town footprint: 5x5 tiles around the centre; the inner 3x3 holds half the people, the outer ring the
+  other half (so a small station on the centre serves 50%). A town tile inside several catchments counts
+  for the station built first.
+- Town populations on generated maps: 400–3,000, rolled after town placement.
+- Industries keep their output in stock at the industry; any station covering it can load it. Each kind
+  appears once per 2,048 map tiles (2 each on 64x64), at least 4 tiles from towns and other industries;
+  timber camps on forest, the rest on plains.
+- Car capacity: passenger car 40 units (passengers and mail share it), freight car 20 units of any freight.
+- A stop unloads cargo the station accepts (towns accept passengers/mail; industries their input), then
+  applies the car order, then loads. Cargo that no longer fits after removing cars is lost.
+- Profit counts construction and rolling-stock spending as expenses (no depreciation yet).
+- Double track: costs today's segment price again (bridge segment $30,000); twice the maintenance; demolish
+  refunds both lines.
+- Section signalling: stations, plain double-line tiles and junctions (3+ segments) are passing places.
