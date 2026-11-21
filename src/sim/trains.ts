@@ -42,6 +42,10 @@ export interface Train {
   journeys: number;
   /** Cargo on board. */
   cargo: Lot[];
+  /** A one-off trip to this station, taking priority over the route. */
+  trip: Coord | null;
+  /** The last station it called at. */
+  lastStop: Coord | null;
   readonly waitedFor: Set<number>;
 }
 
@@ -62,7 +66,7 @@ export function advanceTrains(ctx: MovementContext): void {
 }
 
 function stepTrain(ctx: MovementContext, t: Train): void {
-  if (t.route.length < 2) {
+  if (t.route.length < 2 && !t.trip) {
     if (!t.next) {
       t.status = 'idle';
       return;
@@ -86,15 +90,25 @@ function stepTrain(ctx: MovementContext, t: Train): void {
   t.progress = 0;
   t.plan.shift();
 
-  if (t.route.length >= 2 && sameCoord(t.at, t.route[t.target]!)) {
+  if (t.trip && sameCoord(t.at, t.trip)) {
     t.journeys++;
+    t.lastStop = { ...t.at };
+    ctx.serviceStop(t, -1);
+    t.trip = null;
+    t.plan = [];
+    t.status = t.route.length >= 2 ? 'at-stop' : 'idle';
+    return;
+  }
+  if (!t.trip && t.route.length >= 2 && sameCoord(t.at, t.route[t.target]!)) {
+    t.journeys++;
+    t.lastStop = { ...t.at };
     ctx.serviceStop(t, t.target);
     t.target = (t.target + 1) % t.route.length;
     t.plan = [];
     t.status = 'at-stop'; // dwell for the rest of this tick
     return;
   }
-  if (t.route.length < 2) {
+  if (t.route.length < 2 && !t.trip) {
     t.status = 'idle';
     return;
   }
@@ -104,10 +118,11 @@ function stepTrain(ctx: MovementContext, t: Train): void {
 /** Plan towards the current stop and claim the next segment. Returns false if the train must wait. */
 function tryDepart(ctx: MovementContext, t: Train): boolean {
   // Skip stops the train is already standing on.
-  for (let i = 0; i < t.route.length && sameCoord(t.at, t.route[t.target]!); i++)
-    t.target = (t.target + 1) % t.route.length;
+  if (!t.trip)
+    for (let i = 0; i < t.route.length && sameCoord(t.at, t.route[t.target]!); i++)
+      t.target = (t.target + 1) % t.route.length;
 
-  const path = planPath(ctx, t, t.route[t.target]!);
+  const path = planPath(ctx, t, t.trip ?? t.route[t.target]!);
   if (!path || path.length < 2) {
     setWaiting(t, null);
     return false;

@@ -221,3 +221,21 @@ Given('the train has these stops:', function (this: SimWorld, table: DataTable) 
   const result = this.game.setRoute(this.train.id, stops, orders);
   assert.ok(result.ok, !result.ok ? result.error : '');
 });
+
+// --- One-off trips -------------------------------------------------------------
+
+When('I send the train to the station at {coord}', function (this: SimWorld, at: Coord) {
+  this.run((g) => g.sendTrainTo(this.train.id, at));
+});
+
+When("I call off the train's trip", function (this: SimWorld) {
+  this.run((g) => g.cancelTrip(this.train.id));
+});
+
+Then("the train's last stop should be {coord}", function (this: SimWorld, c: Coord) {
+  assert.deepEqual(this.train.lastStop, c);
+});
+
+Then('the train should not be on a trip', function (this: SimWorld) {
+  assert.equal(this.train.trip, null);
+});

@@ -104,6 +104,8 @@ export interface SaveData {
     stopOrders?: (CarCounts | null)[];
     target: number;
     cargo?: Lot[];
+    trip?: Coord | null;
+    lastStop?: Coord | null;
   }[];
   readonly towns?: { population: number; generatedThisYear: number; carriedThisYear: number }[];
   readonly stationWaiting?: WaitingLot[][];
@@ -398,6 +400,8 @@ export class Game {
       deadlocked: false,
       journeys: 0,
       cargo: [],
+      trip: null,
+      lastStop: null,
       waitedFor: new Set(),
     };
     this.trains.push(train);
@@ -543,6 +547,28 @@ export class Game {
     const payment = deliveryPayment(delivery);
     this.spend(-payment, 'cargoIncome');
     return ok(-payment);
+  }
+
+  /** Send a train to a station outside its route, once. It then carries on with its route. */
+  sendTrainTo(trainId: number, at: Coord): CommandResult {
+    const train = this.train(trainId);
+    if (!train) return fail('no such train');
+    if (!this.isStation(at)) return fail('not a station');
+    if (sameAt(train.at, at) && !train.next) return fail('the train is already there');
+    if (!findTrackPath(this.track, train.next ?? train.at, at)) return fail(`no track connects ${fmt(train.at)} and ${fmt(at)}`);
+    train.trip = { ...at };
+    train.plan = [];
+    return ok(0);
+  }
+
+  /** Call off a one-off trip; the train goes back to its route. */
+  cancelTrip(trainId: number): CommandResult {
+    const train = this.train(trainId);
+    if (!train) return fail('no such train');
+    if (!train.trip) return fail('the train is not on a trip');
+    train.trip = null;
+    train.plan = [];
+    return ok(0);
   }
 
   /** At a stop: unload what this station takes, apply the stop's car order, then load. */
@@ -705,6 +731,8 @@ export class Game {
         stopOrders: t.stopOrders,
         target: t.target,
         cargo: t.cargo,
+        trip: t.trip,
+        lastStop: t.lastStop,
       })),
       towns: this.towns.map((t) => ({
         population: t.population,
@@ -735,6 +763,8 @@ export class Game {
       train.stopOrders = t.stopOrders ?? t.route.map(() => null);
       train.target = t.target;
       train.cargo = t.cargo ?? [];
+      train.trip = t.trip ?? null;
+      train.lastStop = t.lastStop ?? null;
     }
     return game;
   }
